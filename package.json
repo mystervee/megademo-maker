@@ -1,0 +1,23 @@
+{
+  "name": "megademo-maker",
+  "version": "0.1.0",
+  "description": "A browser-based megademo builder with retro effects, audio, and customizable scenes.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [
+    "megademo",
+    "retro",
+    "demo-scene",
+    "webgl",
+    "audio"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}

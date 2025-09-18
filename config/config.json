@@ -1,0 +1,50 @@
+{
+  "groupName": "MegaDemo Collective",
+  "theme": "crt",
+  "mobileUploadSupport": true,
+  "assets": {
+    "sprites": [],
+    "fonts": [],
+    "images": [],
+    "music": []
+  },
+  "visual": {
+    "bobs": {
+      "bobCount": 24,
+      "bobColorPalette": ["#48e5c2", "#845ef7", "#ff7c7c", "#ffe066"],
+      "bobSize": 32,
+      "bobSpeed": 1.2,
+      "bobBlendMode": "lighter"
+    },
+    "plasma": {
+      "plasmaResolution": "medium",
+      "plasmaColorScheme": "neon",
+      "plasmaSpeed": 1.0,
+      "plasmaIntensity": 0.85
+    },
+    "starfield": {
+      "starCount": 128,
+      "starSpeed": 1.4,
+      "starColor": "#f8f7ff"
+    }
+  },
+  "scroller": {
+    "messageText": "WELCOME TO THE MEGADEMO MAKER — CUSTOMIZE THIS MESSAGE IN config/config.json!",
+    "messageFont": "Press Start 2P",
+    "messageWaveAmplitude": 18,
+    "messageWaveFrequency": 0.014,
+    "messageSpeed": 2.5,
+    "messageColor": "#48e5c2"
+  },
+  "audio": {
+    "bpm": 120,
+    "loop": true,
+    "sampleBank": [],
+    "trackerPattern": [
+      { "note": "C4", "duration": 0.5 },
+      { "note": "E4", "duration": 0.5 },
+      { "note": "G4", "duration": 0.5 },
+      { "note": "C5", "duration": 0.5 }
+    ]
+  }
+}
