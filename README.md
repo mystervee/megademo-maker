@@ -3,6 +3,12 @@
 
 A modern tribute to the legendary Amiga/Atari ST megademos of the '80s and '90s — now in your browser! This project brings together retro-style effects, music, and visuals with modern web technologies, allowing users to customize and share their own demo scenes.
 
+## 📦 Prerequisites
+
+- **Node.js with npm (default package manager):** The project uses npm for all scripts and dependency management. Install the current LTS release of Node.js, which ships with npm, so that the commands in this guide work as written.
+  - **Windows installation:** Download the official installer from [nodejs.org](https://nodejs.org/), run it, and ensure the options to install npm and add Node.js to your system `PATH` remain selected. After the installer completes, open a fresh PowerShell window and confirm the tools are available by running `node --version` and `npm --version`. Both commands should print version numbers without errors.
+  - If `npm` or `node` is not recognized, sign out and back in (or restart PowerShell) so that the updated `PATH` takes effect, or manually add the installation directory (for example, `C:\Program Files\nodejs\`) to your `PATH` environment variable.
+
 ## 🚀 Features
 
 - Retro-style effects: Bobs, plasma, scrollers, starfields, and more
@@ -171,6 +177,16 @@ Let users create a playlist of demos and play them back-to-back — just like a 
 - Shareable playlist links
 - Export as video montage
 - Sync playback via WebRTC for live demo parties
+
+---
+
+## 🧑‍💻 Local Development
+
+1. Clone this repository and move into the project directory.
+2. Install dependencies with `npm install`.
+3. Start the development server using `npm run dev` and follow the on-screen URL to open the app in your browser.
+
+> **Windows tip:** PowerShell, Command Prompt, and Git Bash all work with the npm scripts in this project. Use a shell session that was opened after installing Node.js so that `node` and `npm` are available on your `PATH`. If PowerShell reports that running scripts is disabled, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once from an elevated PowerShell window, or switch to Command Prompt/Git Bash before retrying `npm run dev`.
 
 ---
 
