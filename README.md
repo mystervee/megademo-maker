@@ -13,6 +13,26 @@ A modern tribute to the legendary Amiga/Atari ST megademos of the '80s and '90s 
 - Modular and extensible architecture
 ---
 
+## 🗺️ Project Scope & Roadmap
+
+### MVP (First Release)
+- Hosted web application that runs directly in the browser
+- Configurable visual effects suite (bobs, plasma, starfield, and other retro shaders)
+- Customizable scroller with adjustable text, wave, and speed controls
+- Audio playback powered by tracker-style sequencing and user-supplied samples
+- Asset upload pipeline for sprites, fonts, music, and images on desktop and mobile
+
+### Stretch Goals (Post-v1)
+- In-browser video export/recording for sharing to social platforms
+- Progressive Web App (PWA) packaging for offline installs and home screen access
+- “Demo Party” playlist mode for sequencing multiple demos back-to-back
+
+### Non-Goals for v1
+- Native desktop or console builds
+- Multiplayer or live-synced party experiences
+- Automated asset marketplace or online library integrations
+- Advanced shader editor or node-based effect authoring
+
 ## 🛠️ Tunables & Settings
 
 All tunables can be configured via a `config.json` file or a web-based UI (coming soon).
