@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Create and customize your own retro megademo in the browser." />
+    <title>Megademo Maker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Roboto:wght@300;400;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="app" class="app">
+      <header class="app__header">
+        <h1 class="app__title">Megademo Maker</h1>
+        <p class="app__subtitle">Build retro scenes with bobs, plasma, starfields, and tracker beats.</p>
+      </header>
+      <main class="app__main">
+        <canvas id="demo-canvas" width="960" height="540" aria-label="Demo scene canvas"></canvas>
+        <section id="control-panel" class="control-panel" aria-label="Megademo controls"></section>
+      </main>
+      <footer class="app__footer">
+        <p>Drop assets into the folders under <code>assets/</code> or tweak <code>config/config.json</code> to customize your show.</p>
+      </footer>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
