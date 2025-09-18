@@ -43,7 +43,7 @@ export default defineConfig({
     port: 5173,
     open: true,
     fs: {
-      allow: [resolve(process.cwd(), 'config')]
+      allow: [resolve(process.cwd()), resolve(process.cwd(), 'config')]
     }
   },
   build: {
@@ -52,3 +52,4 @@ export default defineConfig({
   },
   plugins: [copyConfigPlugin()]
 });
+
