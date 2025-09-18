@@ -180,6 +180,17 @@ Let users create a playlist of demos and play them back-to-back — just like a 
 
 ---
 
+## 🚀 Deployment
+
+Once you have run `npm run build`, the `dist/` directory contains a static version of your megademo that can be hosted almost anywhere. Common options include:
+
+- **Cloudflare Pages:** Install the [Wrangler CLI](https://developers.cloudflare.com/pages/get-started/#install) and run `wrangler pages publish dist` to push the latest build straight from your terminal. You can also deploy from the Cloudflare dashboard by creating a new Pages project, choosing the **Direct Upload** workflow, and uploading the contents of `dist/`. Either route gives you a live URL (and optional custom domain) where the demo plays instantly.
+- **itch.io (HTML5 project):** Zip the contents of `dist/` (for example, `zip -r megademo.zip dist/*`) and upload it to a new itch.io project configured as **Kind of project → HTML5**. itch.io extracts the archive, hosts the playable build, and provides a shareable project URL (e.g., `https://yourname.itch.io/megademo`) that you can post publicly or keep restricted.
+
+After deployment, any exported demos or in-app share links simply point to the hosted URL for that build, so you can distribute the Cloudflare Pages or itch.io link exactly as-is and your audience gets the live, playable experience in their browser.
+
+---
+
 ## 🧑‍💻 Local Development
 
 1. Clone this repository and move into the project directory.
