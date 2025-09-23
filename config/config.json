@@ -38,13 +38,183 @@
   },
   "audio": {
     "bpm": 120,
+    "swing": 0,
+    "stepsPerBar": 8,
     "loop": true,
-    "sampleBank": [],
-    "trackerPattern": [
-      { "note": "C4", "duration": 0.5 },
-      { "note": "E4", "duration": 0.5 },
-      { "note": "G4", "duration": 0.5 },
-      { "note": "C5", "duration": 0.5 }
+    "sampleLibrary": [
+      {
+        "id": "lead-main",
+        "name": "Lead Sample",
+        "description": "Bright saw lead sampled at middle C",
+        "category": "Lead",
+        "rootNote": "C4",
+        "file": "/assets/music/lead-sample.wav",
+        "color": "#ff6f91"
+      },
+      {
+        "id": "bass-main",
+        "name": "Bass Sample",
+        "description": "Rounded triangle bass",
+        "category": "Bass",
+        "rootNote": "C2",
+        "file": "/assets/music/bass-sample.wav",
+        "color": "#45c4b0"
+      },
+      {
+        "id": "vocal-yeah",
+        "name": "Vocal \"Yeah\"",
+        "description": "Short synthetic vocal hit",
+        "category": "Vocal",
+        "rootNote": "C4",
+        "file": "/assets/music/vocal-yeah.wav",
+        "color": "#ffd166"
+      },
+      {
+        "id": "drum-kick",
+        "name": "Drum Kick",
+        "description": "Punchy demo-scene kick",
+        "category": "Drums",
+        "rootNote": "C2",
+        "file": "/assets/music/drum-kick.wav",
+        "color": "#f25c54"
+      },
+      {
+        "id": "drum-snare",
+        "name": "Drum Snare",
+        "description": "Snare with noise snap",
+        "category": "Drums",
+        "rootNote": "C4",
+        "file": "/assets/music/drum-snare.wav",
+        "color": "#f9844a"
+      },
+      {
+        "id": "drum-hat",
+        "name": "Hi-Hat",
+        "description": "Tight closed hi-hat",
+        "category": "Drums",
+        "rootNote": "C5",
+        "file": "/assets/music/drum-hat.wav",
+        "color": "#6c63ff"
+      },
+      {
+        "id": "drum-clap",
+        "name": "Hand Clap",
+        "description": "Layered clap",
+        "category": "Drums",
+        "rootNote": "C4",
+        "file": "/assets/music/drum-clap.wav",
+        "color": "#ffad5a"
+      },
+      {
+        "id": "drum-tom",
+        "name": "Floor Tom",
+        "description": "Low tom hit",
+        "category": "Drums",
+        "rootNote": "C3",
+        "file": "/assets/music/drum-tom.wav",
+        "color": "#39a0ed"
+      },
+      {
+        "id": "drum-cymbal",
+        "name": "Ride Cymbal",
+        "description": "Long metallic cymbal",
+        "category": "Drums",
+        "rootNote": "C5",
+        "file": "/assets/music/drum-cymbal.wav",
+        "color": "#f7b801"
+      }
+    ],
+    "tracks": [
+      {
+        "id": "track-lead",
+        "name": "Lead",
+        "color": "#ff6f91",
+        "maxSampleSlots": 4,
+        "sampleSlots": [
+          { "id": "track-lead-slot-0", "sampleId": "lead-main" },
+          { "id": "track-lead-slot-1", "sampleId": null },
+          { "id": "track-lead-slot-2", "sampleId": null },
+          { "id": "track-lead-slot-3", "sampleId": null }
+        ],
+        "steps": [
+          { "enabled": true, "sampleSlot": 0, "pitch": 0, "volume": 0.85, "pan": -0.1, "reverse": false, "mod": "none" },
+          { "enabled": false, "sampleSlot": 0, "pitch": 0, "volume": 0.85, "pan": -0.1, "reverse": false, "mod": "none" },
+          { "enabled": true, "sampleSlot": 0, "pitch": 7, "volume": 0.82, "pan": 0.1, "reverse": false, "mod": "chorus" },
+          { "enabled": false, "sampleSlot": 0, "pitch": 0, "volume": 0.8, "pan": 0.15, "reverse": false, "mod": "none" },
+          { "enabled": true, "sampleSlot": 0, "pitch": 12, "volume": 0.9, "pan": -0.05, "reverse": false, "mod": "none" },
+          { "enabled": false, "sampleSlot": 0, "pitch": 0, "volume": 0.8, "pan": 0, "reverse": false, "mod": "none" },
+          { "enabled": true, "sampleSlot": 0, "pitch": 7, "volume": 0.85, "pan": 0.15, "reverse": false, "mod": "delay" },
+          { "enabled": false, "sampleSlot": 0, "pitch": 0, "volume": 0.8, "pan": 0.05, "reverse": false, "mod": "none" }
+        ]
+      },
+      {
+        "id": "track-bass",
+        "name": "Bass",
+        "color": "#45c4b0",
+        "maxSampleSlots": 4,
+        "sampleSlots": [
+          { "id": "track-bass-slot-0", "sampleId": "bass-main" },
+          { "id": "track-bass-slot-1", "sampleId": null },
+          { "id": "track-bass-slot-2", "sampleId": null },
+          { "id": "track-bass-slot-3", "sampleId": null }
+        ],
+        "steps": [
+          { "enabled": true, "sampleSlot": 0, "pitch": -12, "volume": 0.9, "pan": 0, "reverse": false, "mod": "none" },
+          { "enabled": false, "sampleSlot": 0, "pitch": 0, "volume": 0.9, "pan": 0, "reverse": false, "mod": "none" },
+          { "enabled": true, "sampleSlot": 0, "pitch": -7, "volume": 0.95, "pan": 0, "reverse": false, "mod": "lpf" },
+          { "enabled": false, "sampleSlot": 0, "pitch": 0, "volume": 0.9, "pan": 0, "reverse": false, "mod": "none" },
+          { "enabled": true, "sampleSlot": 0, "pitch": -12, "volume": 0.9, "pan": 0, "reverse": false, "mod": "none" },
+          { "enabled": false, "sampleSlot": 0, "pitch": 0, "volume": 0.9, "pan": 0, "reverse": false, "mod": "none" },
+          { "enabled": true, "sampleSlot": 0, "pitch": -5, "volume": 0.95, "pan": 0, "reverse": false, "mod": "lpf" },
+          { "enabled": false, "sampleSlot": 0, "pitch": 0, "volume": 0.9, "pan": 0, "reverse": false, "mod": "none" }
+        ]
+      },
+      {
+        "id": "track-vocal",
+        "name": "Vocal FX",
+        "color": "#ffd166",
+        "maxSampleSlots": 4,
+        "sampleSlots": [
+          { "id": "track-vocal-slot-0", "sampleId": "vocal-yeah" },
+          { "id": "track-vocal-slot-1", "sampleId": null },
+          { "id": "track-vocal-slot-2", "sampleId": null },
+          { "id": "track-vocal-slot-3", "sampleId": null }
+        ],
+        "steps": [
+          { "enabled": false, "sampleSlot": 0, "pitch": 0, "volume": 0.95, "pan": 0, "reverse": false, "mod": "none" },
+          { "enabled": false, "sampleSlot": 0, "pitch": 0, "volume": 0.95, "pan": 0, "reverse": false, "mod": "none" },
+          { "enabled": false, "sampleSlot": 0, "pitch": 0, "volume": 0.95, "pan": 0, "reverse": false, "mod": "none" },
+          { "enabled": true, "sampleSlot": 0, "pitch": 0, "volume": 1, "pan": 0.25, "reverse": false, "mod": "chorus" },
+          { "enabled": false, "sampleSlot": 0, "pitch": 0, "volume": 0.95, "pan": 0, "reverse": false, "mod": "none" },
+          { "enabled": false, "sampleSlot": 0, "pitch": 0, "volume": 0.95, "pan": 0, "reverse": false, "mod": "none" },
+          { "enabled": false, "sampleSlot": 0, "pitch": 0, "volume": 0.95, "pan": 0, "reverse": false, "mod": "none" },
+          { "enabled": true, "sampleSlot": 0, "pitch": 0, "volume": 0.85, "pan": -0.2, "reverse": true, "mod": "delay" }
+        ]
+      },
+      {
+        "id": "track-drums",
+        "name": "Drums",
+        "color": "#f25c54",
+        "maxSampleSlots": 6,
+        "sampleSlots": [
+          { "id": "track-drums-slot-0", "sampleId": "drum-kick" },
+          { "id": "track-drums-slot-1", "sampleId": "drum-snare" },
+          { "id": "track-drums-slot-2", "sampleId": "drum-hat" },
+          { "id": "track-drums-slot-3", "sampleId": "drum-clap" },
+          { "id": "track-drums-slot-4", "sampleId": "drum-tom" },
+          { "id": "track-drums-slot-5", "sampleId": "drum-cymbal" }
+        ],
+        "steps": [
+          { "enabled": true, "sampleSlot": 0, "pitch": 0, "volume": 1, "pan": 0, "reverse": false, "mod": "none" },
+          { "enabled": true, "sampleSlot": 2, "pitch": 0, "volume": 0.7, "pan": -0.2, "reverse": false, "mod": "hpf" },
+          { "enabled": true, "sampleSlot": 0, "pitch": 0, "volume": 1, "pan": 0, "reverse": false, "mod": "none" },
+          { "enabled": true, "sampleSlot": 3, "pitch": 0, "volume": 0.85, "pan": 0.1, "reverse": false, "mod": "bitcrush" },
+          { "enabled": true, "sampleSlot": 0, "pitch": 0, "volume": 1, "pan": 0, "reverse": false, "mod": "none" },
+          { "enabled": true, "sampleSlot": 2, "pitch": 0, "volume": 0.75, "pan": 0.25, "reverse": false, "mod": "hpf" },
+          { "enabled": true, "sampleSlot": 0, "pitch": 0, "volume": 1, "pan": 0, "reverse": false, "mod": "none" },
+          { "enabled": true, "sampleSlot": 5, "pitch": 0, "volume": 0.8, "pan": 0.05, "reverse": false, "mod": "none" }
+        ]
+      }
     ]
   }
 }

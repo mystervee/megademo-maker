@@ -1,49 +1,151 @@
-const A4_FREQUENCY = 440;
-const NOTE_OFFSETS = {
-  C: -9,
-  'C#': -8,
-  Db: -8,
-  D: -7,
-  'D#': -6,
-  Eb: -6,
-  E: -5,
-  F: -4,
-  'F#': -3,
-  Gb: -3,
-  G: -2,
-  'G#': -1,
-  Ab: -1,
-  A: 0,
-  'A#': 1,
-  Bb: 1,
-  B: 2
-};
-
-function noteToFrequency(note) {
-  if (!note) return null;
-  const match = note.trim().match(/^([A-Ga-g])([#b]?)(\d)$/);
-  if (!match) return null;
-
-  const [, letter, accidental, octaveRaw] = match;
-  const key = `${letter.toUpperCase()}${accidental}`;
-  const octave = Number.parseInt(octaveRaw, 10);
-  const semitoneOffset = NOTE_OFFSETS[key];
-  if (typeof semitoneOffset !== 'number') return null;
-
-  const totalSemitones = semitoneOffset + (octave - 4) * 12;
-  return A4_FREQUENCY * Math.pow(2, totalSemitones / 12);
-}
+const DEFAULT_STEP_COUNT = 8;
+const MAX_SWING = 0.45;
 
 const clone = (value) =>
   typeof structuredClone === 'function' ? structuredClone(value) : JSON.parse(JSON.stringify(value));
 
+const DEFAULT_AUDIO_CONFIG = {
+  bpm: 120,
+  swing: 0,
+  stepsPerBar: DEFAULT_STEP_COUNT,
+  loop: true,
+  sampleLibrary: [],
+  tracks: []
+};
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function ensureArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function normaliseSample(sample = {}, index = 0) {
+  return {
+    id: sample.id ?? `sample-${index}`,
+    name: sample.name ?? `Sample ${index + 1}`,
+    description: sample.description ?? '',
+    category: sample.category ?? 'Sample',
+    rootNote: sample.rootNote ?? 'C4',
+    file: sample.file ?? sample.url ?? '',
+    color: sample.color ?? '#48e5c2'
+  };
+}
+
+function normaliseTrack(track = {}, index = 0, stepsPerBar = DEFAULT_STEP_COUNT) {
+  const trackId = track.id ?? `track-${index}`;
+  const maxSampleSlots = Math.max(1, Number.isInteger(track.maxSampleSlots) ? track.maxSampleSlots : 4);
+  const sampleSlots = Array.from({ length: maxSampleSlots }, (_, slotIndex) => {
+    const slot = track.sampleSlots?.[slotIndex] ?? {};
+    return {
+      id: slot.id ?? `${trackId}-slot-${slotIndex}`,
+      sampleId: typeof slot.sampleId === 'string' ? slot.sampleId : null
+    };
+  });
+
+  const stepCount = Array.isArray(track.steps) && track.steps.length > 0 ? track.steps.length : stepsPerBar;
+  const steps = Array.from({ length: stepCount }, (_, stepIndex) => {
+    const step = track.steps?.[stepIndex] ?? {};
+    return {
+      enabled: Boolean(step.enabled),
+      sampleSlot: Number.isInteger(step.sampleSlot) ? step.sampleSlot : 0,
+      pitch: Number.isFinite(step.pitch) ? step.pitch : 0,
+      volume: typeof step.volume === 'number' ? clamp(step.volume, 0, 2) : 1,
+      pan: typeof step.pan === 'number' ? clamp(step.pan, -1, 1) : 0,
+      reverse: Boolean(step.reverse),
+      mod: typeof step.mod === 'string' ? step.mod : 'none'
+    };
+  });
+
+  return {
+    id: trackId,
+    name: track.name ?? `Track ${index + 1}`,
+    color: track.color ?? '#48e5c2',
+    maxSampleSlots,
+    sampleSlots,
+    steps,
+    muted: Boolean(track.muted)
+  };
+}
+
+export function normalizeAudioConfig(input = {}) {
+  const provided = clone(input ?? {});
+  const bpm = Number.isFinite(provided.bpm) ? provided.bpm : DEFAULT_AUDIO_CONFIG.bpm;
+  const swing = clamp(Number.isFinite(provided.swing) ? provided.swing : DEFAULT_AUDIO_CONFIG.swing, 0, 100);
+  const stepsPerBarRaw = Number.isInteger(provided.stepsPerBar) ? provided.stepsPerBar : DEFAULT_AUDIO_CONFIG.stepsPerBar;
+  const stepsPerBar = Math.max(1, stepsPerBarRaw ?? DEFAULT_STEP_COUNT);
+  const loop = Boolean(provided.loop ?? DEFAULT_AUDIO_CONFIG.loop);
+
+  const sampleLibrary = ensureArray(provided.sampleLibrary).map((sample, index) => normaliseSample(sample, index));
+  const tracks = ensureArray(provided.tracks).map((track, index) => normaliseTrack(track, index, stepsPerBar));
+
+  return {
+    bpm,
+    swing,
+    stepsPerBar,
+    loop,
+    sampleLibrary,
+    tracks
+  };
+}
+
+function createReversedBuffer(context, buffer) {
+  const reversed = context.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
+  for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
+    const sourceData = buffer.getChannelData(channel);
+    const targetData = reversed.getChannelData(channel);
+    for (let i = 0; i < sourceData.length; i += 1) {
+      targetData[i] = sourceData[sourceData.length - 1 - i];
+    }
+  }
+  return reversed;
+}
+
+function createBitcrusherCurve(bits = 4) {
+  const length = 2 ** 16;
+  const curve = new Float32Array(length);
+  const levels = 2 ** bits;
+  for (let i = 0; i < length; i += 1) {
+    const x = (i / (length - 1)) * 2 - 1;
+    curve[i] = Math.round(x * levels) / levels;
+  }
+  return curve;
+}
+
+function getStepDurationSeconds(config, stepIndex) {
+  const bpm = config.bpm || 120;
+  const stepsPerBar = config.stepsPerBar || DEFAULT_STEP_COUNT;
+  const stepsPerBeat = stepsPerBar / 4 || 1;
+  const baseDuration = (60 / bpm) / stepsPerBeat;
+  const swingAmount = clamp((config.swing ?? 0) / 100, 0, MAX_SWING);
+  if (stepIndex % 2 === 1) {
+    return baseDuration * (1 + swingAmount);
+  }
+  return baseDuration * (1 - swingAmount);
+}
+
+function collectSampleIds(audioConfig) {
+  const ids = new Set();
+  audioConfig.tracks.forEach((track) => {
+    track.sampleSlots.forEach((slot) => {
+      if (slot?.sampleId) {
+        ids.add(slot.sampleId);
+      }
+    });
+  });
+  return ids;
+}
+
 export function createAudioEngine(initialConfig = {}) {
-  let config = clone(initialConfig);
+  let config = normalizeAudioConfig(initialConfig);
   let audioContext = null;
   let outputGain = null;
   let isPlaying = false;
-  let timeoutId = null;
   let stepIndex = 0;
+  let timeoutId = null;
+  const sampleCache = new Map();
+  const loadingMap = new Map();
 
   function ensureContext() {
     if (audioContext) return audioContext;
@@ -51,10 +153,9 @@ export function createAudioEngine(initialConfig = {}) {
     if (!Context) {
       throw new Error('Web Audio API is not supported in this browser.');
     }
-
     audioContext = new Context();
     outputGain = audioContext.createGain();
-    outputGain.gain.value = 0.18;
+    outputGain.gain.value = 0.8;
     outputGain.connect(audioContext.destination);
     return audioContext;
   }
@@ -66,37 +167,205 @@ export function createAudioEngine(initialConfig = {}) {
     }
   }
 
-  function scheduleNext() {
-    if (!isPlaying || !config.trackerPattern || config.trackerPattern.length === 0) {
-      return;
+  async function loadSample(sampleId) {
+    if (!sampleId) return null;
+    if (sampleCache.has(sampleId)) {
+      return sampleCache.get(sampleId);
+    }
+    if (loadingMap.has(sampleId)) {
+      return loadingMap.get(sampleId);
+    }
+
+    const sample = config.sampleLibrary.find((entry) => entry.id === sampleId);
+    if (!sample || !sample.file) {
+      return null;
     }
 
     const context = ensureContext();
-    const step = config.trackerPattern[stepIndex % config.trackerPattern.length];
-    const noteDuration = (step?.duration ?? 0.5) * (60 / (config.bpm ?? 120));
-    const frequency = noteToFrequency(step?.note);
-    const startTime = context.currentTime;
-    const endTime = startTime + noteDuration;
+    const promise = (async () => {
+      try {
+        const response = await fetch(sample.file);
+        if (!response.ok) {
+          throw new Error(`Request failed with status ${response.status}`);
+        }
+        const arrayBuffer = await response.arrayBuffer();
+        const audioBuffer = await context.decodeAudioData(arrayBuffer);
+        const reversedBuffer = createReversedBuffer(context, audioBuffer);
+        const entry = { buffer: audioBuffer, reversed: reversedBuffer };
+        sampleCache.set(sampleId, entry);
+        return entry;
+      } catch (error) {
+        console.warn(`Unable to load sample file for ${sampleId} at ${sample.file}`, error);
+        sampleCache.set(sampleId, null);
+        return null;
+      }
+    })();
 
-    if (frequency) {
-      const oscillator = context.createOscillator();
-      oscillator.type = 'square';
-      oscillator.frequency.value = frequency;
+    loadingMap.set(sampleId, promise);
+    try {
+      return await promise;
+    } finally {
+      loadingMap.delete(sampleId);
+    }
+  }
 
-      const envelope = context.createGain();
-      envelope.gain.setValueAtTime(0, startTime);
-      envelope.gain.linearRampToValueAtTime(0.4, startTime + 0.01);
-      envelope.gain.exponentialRampToValueAtTime(0.001, endTime);
+  async function prepareSamples() {
+    const ids = Array.from(collectSampleIds(config));
+    if (ids.length === 0) return;
+    await Promise.all(ids.map((id) => loadSample(id).catch((error) => {
+      console.warn(`Failed to preload sample ${id}`, error);
+    })));
+  }
 
-      oscillator.connect(envelope);
-      envelope.connect(outputGain);
-      oscillator.start(startTime);
-      oscillator.stop(endTime + 0.05);
+  function createModChain(context, node, step, startTime) {
+    let current = node;
+    switch (step.mod) {
+      case 'lpf': {
+        const filter = context.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(1200, startTime);
+        filter.Q.setValueAtTime(0.7, startTime);
+        current.connect(filter);
+        current = filter;
+        break;
+      }
+      case 'hpf': {
+        const filter = context.createBiquadFilter();
+        filter.type = 'highpass';
+        filter.frequency.setValueAtTime(1000, startTime);
+        filter.Q.setValueAtTime(0.9, startTime);
+        current.connect(filter);
+        current = filter;
+        break;
+      }
+      case 'bitcrush': {
+        const crusher = context.createWaveShaper();
+        crusher.curve = createBitcrusherCurve(4);
+        crusher.oversample = '4x';
+        current.connect(crusher);
+        current = crusher;
+        break;
+      }
+      case 'chorus': {
+        const dry = context.createGain();
+        const wet = context.createGain();
+        dry.gain.setValueAtTime(0.8, startTime);
+        wet.gain.setValueAtTime(0.4, startTime);
+        const delay = context.createDelay();
+        delay.delayTime.setValueAtTime(0.02, startTime);
+        const feedback = context.createGain();
+        feedback.gain.setValueAtTime(0.2, startTime);
+        current.connect(dry);
+        current.connect(delay);
+        delay.connect(feedback);
+        feedback.connect(delay);
+        delay.connect(wet);
+        const mix = context.createGain();
+        dry.connect(mix);
+        wet.connect(mix);
+        current = mix;
+        break;
+      }
+      case 'delay': {
+        const dry = context.createGain();
+        const wet = context.createGain();
+        dry.gain.setValueAtTime(0.9, startTime);
+        wet.gain.setValueAtTime(0.5, startTime);
+        const delay = context.createDelay();
+        delay.delayTime.setValueAtTime(0.28, startTime);
+        const feedback = context.createGain();
+        feedback.gain.setValueAtTime(0.35, startTime);
+        current.connect(dry);
+        current.connect(delay);
+        delay.connect(wet);
+        delay.connect(feedback);
+        feedback.connect(delay);
+        const mix = context.createGain();
+        dry.connect(mix);
+        wet.connect(mix);
+        current = mix;
+        break;
+      }
+      default:
+        break;
+    }
+    return current;
+  }
+
+  function playStep(track, step, startTime) {
+    const context = ensureContext();
+    const slot = track.sampleSlots?.[step.sampleSlot];
+    if (!slot || !slot.sampleId) {
+      return;
+    }
+    loadSample(slot.sampleId)
+      .then((entry) => {
+        if (!entry) return;
+        const source = context.createBufferSource();
+        source.buffer = step.reverse ? entry.reversed : entry.buffer;
+        const playbackRate = Math.pow(2, (step.pitch ?? 0) / 12);
+        const now = context.currentTime;
+        const playbackStart = Math.max(startTime, now + 0.01);
+        source.playbackRate.setValueAtTime(playbackRate, playbackStart);
+        source.loop = false;
+
+        let chain = source;
+        chain = createModChain(context, chain, step, playbackStart);
+
+        const gainNode = context.createGain();
+        gainNode.gain.setValueAtTime(clamp(step.volume ?? 1, 0, 2), playbackStart);
+        chain.connect(gainNode);
+
+        let destination = gainNode;
+        if (context.createStereoPanner) {
+          const panner = context.createStereoPanner();
+          panner.pan.setValueAtTime(clamp(step.pan ?? 0, -1, 1), playbackStart);
+          destination.connect(panner);
+          destination = panner;
+        }
+
+        destination.connect(outputGain);
+
+        const stopTime = playbackStart + (source.buffer.duration / playbackRate) + 0.05;
+        source.start(playbackStart);
+        source.stop(stopTime);
+      })
+      .catch((error) => {
+        console.warn('Failed to play sample', error);
+      });
+  }
+
+  function cycleLength() {
+    return Math.max(1, config.stepsPerBar || DEFAULT_STEP_COUNT);
+  }
+
+  function scheduleNext() {
+    if (!isPlaying) return;
+    const context = ensureContext();
+    const nominalStart = context.currentTime + 0.06;
+    const tracks = config.tracks ?? [];
+
+    tracks.forEach((track) => {
+      if (track.muted) return;
+      const steps = track.steps ?? [];
+      if (steps.length === 0) return;
+      const step = steps[stepIndex % steps.length];
+      if (!step || !step.enabled) return;
+      playStep(track, step, nominalStart);
+    });
+
+    const duration = getStepDurationSeconds(config, stepIndex);
+    const nextIndex = stepIndex + 1;
+    if (!config.loop && nextIndex >= cycleLength()) {
+      window.setTimeout(() => {
+        stop();
+      }, duration * 1000);
+      return;
     }
 
-    stepIndex += 1;
+    stepIndex = nextIndex % cycleLength();
     clearTimer();
-    timeoutId = window.setTimeout(scheduleNext, noteDuration * 1000);
+    timeoutId = window.setTimeout(scheduleNext, duration * 1000);
   }
 
   async function start() {
@@ -104,6 +373,7 @@ export function createAudioEngine(initialConfig = {}) {
     try {
       const context = ensureContext();
       await context.resume();
+      await prepareSamples();
       isPlaying = true;
       stepIndex = 0;
       scheduleNext();
@@ -128,14 +398,17 @@ export function createAudioEngine(initialConfig = {}) {
   }
 
   function updateConfig(nextConfig = {}) {
-    config = clone(nextConfig);
+    config = normalizeAudioConfig(nextConfig);
     if (isPlaying) {
       stepIndex = 0;
+      prepareSamples();
     }
   }
 
   function destroy() {
     stop();
+    sampleCache.clear();
+    loadingMap.clear();
     if (audioContext) {
       audioContext.close();
       audioContext = null;
@@ -147,12 +420,39 @@ export function createAudioEngine(initialConfig = {}) {
     return { isPlaying };
   }
 
+  async function previewSample(sampleId) {
+    if (!sampleId) return;
+    try {
+      const context = ensureContext();
+      await context.resume();
+      const entry = await loadSample(sampleId);
+      if (!entry) return;
+      const source = context.createBufferSource();
+      source.buffer = entry.buffer;
+      const gainNode = context.createGain();
+      gainNode.gain.value = 0.6;
+      source.connect(gainNode);
+      gainNode.connect(outputGain);
+      const startTime = context.currentTime + 0.01;
+      source.start(startTime);
+      source.stop(startTime + entry.buffer.duration + 0.05);
+    } catch (error) {
+      console.warn('Sample preview failed', error);
+    }
+  }
+
   return {
     start,
     stop,
     toggle,
     updateConfig,
     destroy,
-    getState
+    getState,
+    previewSample
   };
 }
+
+export const __INTERNALS__ = {
+  normalizeAudioConfig,
+  DEFAULT_AUDIO_CONFIG
+};
