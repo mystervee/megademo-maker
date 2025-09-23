@@ -1,3 +1,5 @@
+import { createTrackerPanel } from './tracker.js';
+
 const clone = (value) =>
   typeof structuredClone === 'function' ? structuredClone(value) : JSON.parse(JSON.stringify(value));
 
@@ -68,7 +70,7 @@ function deepMerge(target, source) {
   return output;
 }
 
-export function createControlPanel(container, initialConfig, { onChange, onAudioToggle }) {
+export function createControlPanel(container, initialConfig, { onChange, onAudioToggle, onSamplePreview }) {
   let config = clone(initialConfig);
   container.innerHTML = '';
 
@@ -185,6 +187,19 @@ export function createControlPanel(container, initialConfig, { onChange, onAudio
   const audioGroup = createGroup('Audio');
   audioGroup.appendChild(playbackButton);
 
+  const trackerPanel = createTrackerPanel(config.audio ?? {}, {
+    onChange: (nextAudioConfig) => {
+      updateConfig({ audio: nextAudioConfig });
+    },
+    onSamplePreview: (sampleId) => {
+      if (typeof onSamplePreview === 'function') {
+        onSamplePreview(sampleId);
+      }
+    }
+  });
+
+  audioGroup.appendChild(trackerPanel.element);
+
   container.append(demoGroup, scrollerGroup, visualGroup, audioGroup);
 
   function updateConfig(partial) {
@@ -202,6 +217,7 @@ export function createControlPanel(container, initialConfig, { onChange, onAudio
     bobSpeedInput.value = String(config.visual?.bobs?.bobSpeed ?? 1.2);
     plasmaIntensityInput.value = String(config.visual?.plasma?.plasmaIntensity ?? 0.85);
     starSpeedInput.value = String(config.visual?.starfield?.starSpeed ?? 1.4);
+    trackerPanel.update(config.audio ?? {});
   }
 
   function setAudioState(isPlaying) {

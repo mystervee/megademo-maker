@@ -26,8 +26,11 @@ async function loadConfig() {
       scroller: {},
       audio: {
         bpm: 120,
+        swing: 0,
+        stepsPerBar: 8,
         loop: true,
-        trackerPattern: []
+        sampleLibrary: [],
+        tracks: []
       }
     };
   }
@@ -68,6 +71,10 @@ class MegademoApp {
       },
       onAudioToggle: () => {
         this.toggleAudio();
+      },
+      onSamplePreview: (sampleId) => {
+        if (!sampleId) return;
+        this.audioEngine.previewSample(sampleId);
       }
     });
 
