@@ -7,11 +7,19 @@ function createGroup(title) {
   const group = document.createElement('section');
   group.className = 'control-group';
 
+  const header = document.createElement('header');
+  header.className = 'control-group__header';
+
   const heading = document.createElement('h2');
   heading.textContent = title;
-  group.appendChild(heading);
+  header.appendChild(heading);
 
-  return group;
+  const content = document.createElement('div');
+  content.className = 'control-group__content';
+
+  group.append(header, content);
+
+  return { element: group, content };
 }
 
 function createLabeledInput({ label, type = 'text', value, min, max, step, multiline = false }) {
@@ -82,7 +90,7 @@ export function createControlPanel(container, initialConfig, { onChange, onAudio
     onAudioToggle();
   });
 
-  const demoGroup = createGroup('Demo Settings');
+  const demoGroup = createGroup('Main Demo Settings');
   const { wrapper: groupNameWrapper, input: groupNameInput } = createLabeledInput({
     label: 'Group Name',
     value: config.groupName ?? ''
@@ -90,7 +98,7 @@ export function createControlPanel(container, initialConfig, { onChange, onAudio
   groupNameInput.addEventListener('input', () => {
     updateConfig({ groupName: groupNameInput.value });
   });
-  demoGroup.appendChild(groupNameWrapper);
+  demoGroup.content.appendChild(groupNameWrapper);
 
   const { wrapper: themeWrapper, select: themeSelect } = createSelect({
     label: 'Theme',
@@ -105,7 +113,7 @@ export function createControlPanel(container, initialConfig, { onChange, onAudio
   themeSelect.addEventListener('change', () => {
     updateConfig({ theme: themeSelect.value });
   });
-  demoGroup.appendChild(themeWrapper);
+  demoGroup.content.appendChild(themeWrapper);
 
   const scrollerGroup = createGroup('Rolling Message');
   const { wrapper: messageWrapper, input: messageInput } = createLabeledInput({
@@ -116,7 +124,7 @@ export function createControlPanel(container, initialConfig, { onChange, onAudio
   messageInput.addEventListener('input', () => {
     updateConfig({ scroller: { messageText: messageInput.value } });
   });
-  scrollerGroup.appendChild(messageWrapper);
+  scrollerGroup.content.appendChild(messageWrapper);
 
   const { wrapper: messageSpeedWrapper, input: messageSpeedInput } = createLabeledInput({
     label: 'Scroll Speed',
@@ -129,7 +137,7 @@ export function createControlPanel(container, initialConfig, { onChange, onAudio
   messageSpeedInput.addEventListener('input', () => {
     updateConfig({ scroller: { messageSpeed: Number.parseFloat(messageSpeedInput.value) } });
   });
-  scrollerGroup.appendChild(messageSpeedWrapper);
+  scrollerGroup.content.appendChild(messageSpeedWrapper);
 
   const visualGroup = createGroup('Visual Effects');
   const { wrapper: bobCountWrapper, input: bobCountInput } = createLabeledInput({
@@ -143,7 +151,7 @@ export function createControlPanel(container, initialConfig, { onChange, onAudio
   bobCountInput.addEventListener('input', () => {
     updateConfig({ visual: { bobs: { bobCount: Number.parseInt(bobCountInput.value, 10) } } });
   });
-  visualGroup.appendChild(bobCountWrapper);
+  visualGroup.content.appendChild(bobCountWrapper);
 
   const { wrapper: bobSpeedWrapper, input: bobSpeedInput } = createLabeledInput({
     label: 'Bobs Speed',
@@ -156,7 +164,7 @@ export function createControlPanel(container, initialConfig, { onChange, onAudio
   bobSpeedInput.addEventListener('input', () => {
     updateConfig({ visual: { bobs: { bobSpeed: Number.parseFloat(bobSpeedInput.value) } } });
   });
-  visualGroup.appendChild(bobSpeedWrapper);
+  visualGroup.content.appendChild(bobSpeedWrapper);
 
   const { wrapper: plasmaIntensityWrapper, input: plasmaIntensityInput } = createLabeledInput({
     label: 'Plasma Intensity',
@@ -169,7 +177,7 @@ export function createControlPanel(container, initialConfig, { onChange, onAudio
   plasmaIntensityInput.addEventListener('input', () => {
     updateConfig({ visual: { plasma: { plasmaIntensity: Number.parseFloat(plasmaIntensityInput.value) } } });
   });
-  visualGroup.appendChild(plasmaIntensityWrapper);
+  visualGroup.content.appendChild(plasmaIntensityWrapper);
 
   const { wrapper: starSpeedWrapper, input: starSpeedInput } = createLabeledInput({
     label: 'Star Speed',
@@ -182,10 +190,10 @@ export function createControlPanel(container, initialConfig, { onChange, onAudio
   starSpeedInput.addEventListener('input', () => {
     updateConfig({ visual: { starfield: { starSpeed: Number.parseFloat(starSpeedInput.value) } } });
   });
-  visualGroup.appendChild(starSpeedWrapper);
+  visualGroup.content.appendChild(starSpeedWrapper);
 
   const audioGroup = createGroup('Audio');
-  audioGroup.appendChild(playbackButton);
+  audioGroup.content.appendChild(playbackButton);
 
   const trackerPanel = createTrackerPanel(config.audio ?? {}, {
     onChange: (nextAudioConfig) => {
@@ -198,9 +206,9 @@ export function createControlPanel(container, initialConfig, { onChange, onAudio
     }
   });
 
-  audioGroup.appendChild(trackerPanel.element);
+  audioGroup.content.appendChild(trackerPanel.element);
 
-  container.append(demoGroup, scrollerGroup, visualGroup, audioGroup);
+  container.append(demoGroup.element, scrollerGroup.element, visualGroup.element, audioGroup.element);
 
   function updateConfig(partial) {
     config = deepMerge(config, partial);
@@ -229,3 +237,4 @@ export function createControlPanel(container, initialConfig, { onChange, onAudio
     setAudioState
   };
 }
+

@@ -28,6 +28,7 @@ async function loadConfig() {
         bpm: 120,
         swing: 0,
         stepsPerBar: 8,
+        timeDivision: 2,
         loop: true,
         sampleLibrary: [],
         tracks: []

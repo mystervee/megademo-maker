@@ -13,6 +13,7 @@ A modern tribute to the legendary Amiga/Atari ST megademos of the '80s and '90s 
 
 - Retro-style effects: Bobs, plasma, scrollers, starfields, and more
 - Customizable rolling message with wave and speed controls
+- Streamlined control panel cards for Demo Settings, Rolling Message, Visual Effects, and Audio
 - Soundtracker-style music playback using user-supplied samples
 - Upload your own assets (sprites, fonts, music, images) from desktop or mobile
 - Group name and branding support
@@ -75,6 +76,9 @@ All tunables can be configured via a `config.json` file or a web-based UI (comin
 - `sampleBank`: Upload your own WAV/MP3 samples
 - `bpm`: Beats per minute
 - `loop`: Enable/disable looping
+- `addSteps`: Use the tracker timeline's Add 8 Steps control to extend patterns in 8-step blocks
+
+Tracker sequencing now uses a single global step editor. Click any step in the timeline to focus it, adjust parameters in the editor panel, and stack additional 8-step blocks with the "Add 8 Steps" control for longer arrangements.
 ---
 
 ## 🎛️ User Settings

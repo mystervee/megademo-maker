@@ -1,4 +1,5 @@
 const DEFAULT_STEP_COUNT = 8;
+const DEFAULT_TIME_DIVISION = 2;
 const MAX_SWING = 0.45;
 
 const clone = (value) =>
@@ -8,6 +9,7 @@ const DEFAULT_AUDIO_CONFIG = {
   bpm: 120,
   swing: 0,
   stepsPerBar: DEFAULT_STEP_COUNT,
+  timeDivision: DEFAULT_TIME_DIVISION,
   loop: true,
   sampleLibrary: [],
   tracks: []
@@ -75,6 +77,8 @@ export function normalizeAudioConfig(input = {}) {
   const swing = clamp(Number.isFinite(provided.swing) ? provided.swing : DEFAULT_AUDIO_CONFIG.swing, 0, 100);
   const stepsPerBarRaw = Number.isInteger(provided.stepsPerBar) ? provided.stepsPerBar : DEFAULT_AUDIO_CONFIG.stepsPerBar;
   const stepsPerBar = Math.max(1, stepsPerBarRaw ?? DEFAULT_STEP_COUNT);
+  const timeDivisionRaw = Number.isFinite(provided.timeDivision) ? provided.timeDivision : DEFAULT_TIME_DIVISION;
+  const timeDivision = clamp(Math.round(timeDivisionRaw), 1, 16);
   const loop = Boolean(provided.loop ?? DEFAULT_AUDIO_CONFIG.loop);
 
   const sampleLibrary = ensureArray(provided.sampleLibrary).map((sample, index) => normaliseSample(sample, index));
@@ -84,6 +88,7 @@ export function normalizeAudioConfig(input = {}) {
     bpm,
     swing,
     stepsPerBar,
+    timeDivision,
     loop,
     sampleLibrary,
     tracks
@@ -115,9 +120,8 @@ function createBitcrusherCurve(bits = 4) {
 
 function getStepDurationSeconds(config, stepIndex) {
   const bpm = config.bpm || 120;
-  const stepsPerBar = config.stepsPerBar || DEFAULT_STEP_COUNT;
-  const stepsPerBeat = stepsPerBar / 4 || 1;
-  const baseDuration = (60 / bpm) / stepsPerBeat;
+  const division = Math.max(1, config.timeDivision || DEFAULT_TIME_DIVISION);
+  const baseDuration = (60 / bpm) / division;
   const swingAmount = clamp((config.swing ?? 0) / 100, 0, MAX_SWING);
   if (stepIndex % 2 === 1) {
     return baseDuration * (1 + swingAmount);

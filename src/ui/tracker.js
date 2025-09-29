@@ -12,6 +12,15 @@ const MOD_OPTIONS = [
   { value: 'delay', label: 'Echo delay' }
 ];
 
+const TIME_DIVISION_OPTIONS = [
+  { value: 1, label: 'Quarter (1/4)' },
+  { value: 2, label: 'Eighth (1/8)' },
+  { value: 3, label: 'Triplet (1/12)' },
+  { value: 4, label: 'Sixteenth (1/16)' },
+  { value: 6, label: 'Sixteenth Triplet (1/24)' },
+  { value: 8, label: 'Thirty-second (1/32)' }
+];
+
 function formatPitch(value) {
   const numeric = Number.parseInt(value, 10) || 0;
   if (numeric === 0) return '0 st';
@@ -102,6 +111,18 @@ function createStepButton(stepIndex) {
   return { button, sampleLabel };
 }
 
+function createEmptyStep() {
+  return {
+    enabled: false,
+    sampleSlot: 0,
+    pitch: 0,
+    volume: 1,
+    pan: 0,
+    reverse: false,
+    mod: 'none'
+  };
+}
+
 export function createTrackerPanel(initialAudioConfig = {}, { onChange, onSamplePreview } = {}) {
   let audioConfig = normalizeAudioConfig(initialAudioConfig);
   let selected = { trackIndex: 0, stepIndex: 0 };
@@ -114,16 +135,12 @@ export function createTrackerPanel(initialAudioConfig = {}, { onChange, onSample
   const title = document.createElement('h3');
   title.textContent = 'Demo-Tracker';
   const subtitle = document.createElement('p');
-  subtitle.textContent = '4-track sample sequencer with an 8-step grid.';
+  subtitle.textContent = 'Multi-track pattern editor with extendable 8-step blocks.';
   header.append(title, subtitle);
   root.appendChild(header);
 
-  const layout = document.createElement('div');
-  layout.className = 'tracker__layout';
-  root.appendChild(layout);
-
-  const librarySection = document.createElement('section');
-  librarySection.className = 'tracker__library';
+  const libraryCard = document.createElement('section');
+  libraryCard.className = 'tracker__library-card tracker__panel';
   const libraryHeading = document.createElement('h4');
   libraryHeading.textContent = 'Sample Library';
   const libraryHint = document.createElement('p');
@@ -131,12 +148,100 @@ export function createTrackerPanel(initialAudioConfig = {}, { onChange, onSample
   libraryHint.textContent = 'Click a card to preview and then assign it to a track slot.';
   const libraryGrid = document.createElement('div');
   libraryGrid.className = 'tracker-library__grid';
-  librarySection.append(libraryHeading, libraryHint, libraryGrid);
-  layout.appendChild(librarySection);
+  libraryCard.append(libraryHeading, libraryHint, libraryGrid);
+  root.appendChild(libraryCard);
 
-  const tracksSection = document.createElement('section');
+  const timelineSection = document.createElement('section');
+  timelineSection.className = 'tracker__timeline tracker__panel';
+  root.appendChild(timelineSection);
+
+  const timelineHeader = document.createElement('header');
+  timelineHeader.className = 'tracker__timeline-header';
+  timelineSection.appendChild(timelineHeader);
+
+  const timelineTitle = document.createElement('h4');
+  timelineTitle.textContent = 'Pattern Steps';
+  timelineHeader.appendChild(timelineTitle);
+
+  const tempoControl = document.createElement('div');
+  tempoControl.className = 'tracker__tempo';
+  timelineHeader.appendChild(tempoControl);
+
+  const tempoSlider = document.createElement('div');
+  tempoSlider.className = 'tracker__tempo-slider';
+  tempoControl.appendChild(tempoSlider);
+
+  const tempoLabel = document.createElement('span');
+  tempoLabel.textContent = 'Tempo';
+  tempoSlider.appendChild(tempoLabel);
+
+  const tempoInput = document.createElement('input');
+  tempoInput.type = 'range';
+  tempoInput.min = '40';
+  tempoInput.max = '200';
+  tempoInput.step = '1';
+  tempoSlider.appendChild(tempoInput);
+
+  const tempoValue = document.createElement('span');
+  tempoValue.className = 'tracker__tempo-value';
+  tempoSlider.appendChild(tempoValue);
+
+  const divisionGroup = document.createElement('div');
+  divisionGroup.className = 'tracker__division-group';
+  tempoControl.appendChild(divisionGroup);
+
+  const divisionLabel = document.createElement('span');
+  divisionLabel.textContent = 'Step length';
+  divisionGroup.appendChild(divisionLabel);
+
+  const timeDivisionSelect = document.createElement('select');
+  timeDivisionSelect.className = 'tracker__time-division';
+  TIME_DIVISION_OPTIONS.forEach((option) => {
+    timeDivisionSelect.appendChild(createOption(String(option.value), option.label));
+  });
+  divisionGroup.appendChild(timeDivisionSelect);
+
+  const addStepsButton = document.createElement('button');
+  addStepsButton.type = 'button';
+  addStepsButton.className = 'tracker__add-steps';
+  addStepsButton.textContent = '+8 Steps';
+  timelineHeader.appendChild(addStepsButton);
+
+  const tracksPanel = document.createElement('section');
+  tracksPanel.className = 'tracker__tracks-panel tracker__panel';
+  root.appendChild(tracksPanel);
+
+  const tracksHeading = document.createElement('h4');
+  tracksHeading.className = 'tracker__tracks-heading';
+  tracksHeading.textContent = 'Step & Tune Editor';
+  tracksPanel.appendChild(tracksHeading);
+
+  const tracksSection = document.createElement('div');
   tracksSection.className = 'tracker__tracks';
-  layout.appendChild(tracksSection);
+  tracksPanel.appendChild(tracksSection);
+
+  tempoInput.addEventListener('input', () => {
+    tempoValue.textContent = `${tempoInput.value} BPM`;
+  });
+
+  tempoInput.addEventListener('change', () => {
+    const nextBpm = clamp(Number.parseInt(tempoInput.value, 10) || 120, 40, 200);
+    tempoInput.value = String(nextBpm);
+    tempoValue.textContent = `${nextBpm} BPM`;
+    audioConfig.bpm = nextBpm;
+    emitChange();
+  });
+
+  timeDivisionSelect.addEventListener('change', () => {
+    const nextDivision = clamp(Number.parseInt(timeDivisionSelect.value, 10) || 1, 1, 16);
+    audioConfig.timeDivision = nextDivision;
+    emitChange();
+    syncTempoControl();
+  });
+
+  addStepsButton.addEventListener('click', () => {
+    extendPattern(8);
+  });
 
   const trackViews = [];
 
@@ -168,6 +273,60 @@ export function createTrackerPanel(initialAudioConfig = {}, { onChange, onSample
 
   function getSelectedTrack() {
     return audioConfig.tracks[selected.trackIndex] ?? null;
+  }
+
+  function syncTempoControl() {
+    const bpm = clamp(Math.round(audioConfig.bpm ?? 120), 40, 200);
+    tempoInput.value = String(bpm);
+    tempoValue.textContent = `${bpm} BPM`;
+
+    const division = clamp(Math.round(audioConfig.timeDivision ?? 2), 1, 16);
+    const hasOption = Array.from(timeDivisionSelect.options).some((option) => option.value === String(division));
+    if (!hasOption) {
+      const customOption = createOption(String(division), `Custom (${division} steps/beat)`);
+      customOption.dataset.custom = 'true';
+      timeDivisionSelect.appendChild(customOption);
+    }
+    Array.from(timeDivisionSelect.options)
+      .filter((option) => option.dataset?.custom === 'true' && option.value !== String(division))
+      .forEach((option) => option.remove());
+    timeDivisionSelect.value = String(division);
+  }
+
+  function updateTimelineMeta() {
+    const totalSteps = audioConfig.stepsPerBar ?? audioConfig.tracks[0]?.steps?.length ?? 0;
+    const stepsLabel = totalSteps === 1 ? 'step' : 'steps';
+    const division = Math.max(1, audioConfig.timeDivision ?? 2);
+    const beats = totalSteps / division;
+    const bars = beats / 4;
+    const barsLabel = Number.isFinite(bars) && bars > 0
+      ? ` • ${bars % 1 === 0 ? `${bars} bar${bars === 1 ? '' : 's'}` : `${bars.toFixed(2)} bars`}`
+      : '';
+    timelineTitle.textContent = `Pattern Steps (${totalSteps} ${stepsLabel}${barsLabel})`;
+    addStepsButton.disabled = audioConfig.tracks.length === 0;
+    syncTempoControl();
+  }
+
+  function extendPattern(stepBlockSize = 8) {
+    if (audioConfig.tracks.length === 0) {
+      return;
+    }
+
+    const increment = Math.max(1, stepBlockSize);
+    audioConfig.stepsPerBar = (audioConfig.stepsPerBar ?? 0) + increment;
+    audioConfig.tracks.forEach((track) => {
+      for (let index = 0; index < increment; index += 1) {
+        track.steps.push(createEmptyStep());
+      }
+    });
+
+    const targetTrack = audioConfig.tracks[selected.trackIndex];
+    if (targetTrack) {
+      selected.stepIndex = clamp(targetTrack.steps.length - increment, 0, targetTrack.steps.length - 1);
+    }
+
+    emitChange();
+    syncAll();
   }
 
   function updateLibrary() {
@@ -229,6 +388,7 @@ export function createTrackerPanel(initialAudioConfig = {}, { onChange, onSample
 
     const grid = document.createElement('div');
     grid.className = 'tracker-track__grid';
+    grid.style.gridTemplateColumns = `repeat(${Math.max(track.steps.length, 1)}, minmax(72px, 1fr))`;
     const stepButtons = [];
     const stepLabels = [];
     track.steps.forEach((_, stepIndex) => {
@@ -256,7 +416,7 @@ export function createTrackerPanel(initialAudioConfig = {}, { onChange, onSample
     const editor = createStepEditor(trackIndex);
     section.appendChild(editor.root);
 
-    return { section, slotSelects, stepButtons, stepLabels, editor };
+    return { section, slotSelects, stepButtons, stepLabels, editor, grid };
   }
 
   function buildTracks() {
@@ -289,6 +449,8 @@ export function createTrackerPanel(initialAudioConfig = {}, { onChange, onSample
     if (!view || !track) return;
 
     syncSlotOptions(trackIndex);
+
+    view.grid.style.gridTemplateColumns = `repeat(${Math.max(track.steps.length, 1)}, minmax(72px, 1fr))`;
 
     track.steps.forEach((step, stepIndex) => {
       const button = view.stepButtons[stepIndex];
@@ -538,6 +700,7 @@ export function createTrackerPanel(initialAudioConfig = {}, { onChange, onSample
     ensureSelectionBounds();
     updateLibrary();
     buildTracks();
+    updateTimelineMeta();
     syncTracks();
     syncEditor();
   }
