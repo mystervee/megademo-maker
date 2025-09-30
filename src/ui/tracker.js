@@ -126,6 +126,9 @@ function createEmptyStep() {
 export function createTrackerPanel(initialAudioConfig = {}, { onChange, onSamplePreview } = {}) {
   let audioConfig = normalizeAudioConfig(initialAudioConfig);
   let selected = { trackIndex: 0, stepIndex: 0 };
+  const trackSlotViews = [];
+  const trackViews = [];
+  let stepEditor = null;
 
   const root = document.createElement('div');
   root.className = 'tracker';
@@ -216,6 +219,21 @@ export function createTrackerPanel(initialAudioConfig = {}, { onChange, onSample
   tracksHeading.textContent = 'Step & Tune Editor';
   tracksPanel.appendChild(tracksHeading);
 
+  const editorLayout = document.createElement('div');
+  editorLayout.className = 'tracker__editor-layout';
+  tracksPanel.appendChild(editorLayout);
+
+  const slotGrid = document.createElement('div');
+  slotGrid.className = 'tracker__slot-grid';
+  editorLayout.appendChild(slotGrid);
+
+  const stepEditorContainer = document.createElement('div');
+  stepEditorContainer.className = 'tracker__step-editor-container';
+  editorLayout.appendChild(stepEditorContainer);
+
+  stepEditor = createStepEditor();
+  stepEditorContainer.appendChild(stepEditor.root);
+
   const tracksSection = document.createElement('div');
   tracksSection.className = 'tracker__tracks';
   tracksPanel.appendChild(tracksSection);
@@ -242,8 +260,6 @@ export function createTrackerPanel(initialAudioConfig = {}, { onChange, onSample
   addStepsButton.addEventListener('click', () => {
     extendPattern(8);
   });
-
-  const trackViews = [];
 
   function emitChange() {
     if (typeof onChange === 'function') {
@@ -343,6 +359,94 @@ export function createTrackerPanel(initialAudioConfig = {}, { onChange, onSample
     });
   }
 
+  function buildSlotGrid() {
+    slotGrid.innerHTML = '';
+    trackSlotViews.length = 0;
+
+    if (audioConfig.tracks.length === 0) {
+      const empty = document.createElement('p');
+      empty.className = 'tracker__empty';
+      empty.textContent = 'Add tracks to start assigning samples.';
+      slotGrid.appendChild(empty);
+      syncTrackSelection();
+      return;
+    }
+
+    audioConfig.tracks.forEach((track, index) => {
+      const view = createTrackSlotCard(track, index);
+      trackSlotViews[index] = view;
+      slotGrid.appendChild(view.root);
+    });
+
+    syncTrackSelection();
+  }
+
+  function createTrackSlotCard(track, trackIndex) {
+    const card = document.createElement('article');
+    card.className = 'tracker-track-card';
+    card.style.setProperty('--track-color', track.color ?? '#48e5c2');
+
+    const headerRow = document.createElement('header');
+    headerRow.className = 'tracker-track-card__header';
+    const heading = document.createElement('h5');
+    heading.textContent = track.name ?? `Track ${trackIndex + 1}`;
+    headerRow.appendChild(heading);
+    card.appendChild(headerRow);
+
+    const slotsWrapper = document.createElement('div');
+    slotsWrapper.className = 'tracker-track-card__slots';
+    card.appendChild(slotsWrapper);
+
+    const slotSelects = [];
+    track.sampleSlots.forEach((slot, slotIndex) => {
+      const slotLabel = document.createElement('label');
+      slotLabel.className = 'tracker-slot';
+      const name = document.createElement('span');
+      name.className = 'tracker-slot__name';
+      name.textContent = `Slot ${slotIndex + 1}`;
+      const select = document.createElement('select');
+      select.appendChild(createOption('', 'Empty'));
+      audioConfig.sampleLibrary.forEach((sample) => {
+        select.appendChild(createOption(sample.id, sample.name));
+      });
+      select.value = slot.sampleId ?? '';
+      select.addEventListener('change', () => {
+        const nextValue = select.value || null;
+        audioConfig.tracks[trackIndex].sampleSlots[slotIndex].sampleId = nextValue;
+        emitChange();
+        syncSlotOptions(trackIndex);
+        syncTrack(trackIndex);
+        if (selected.trackIndex === trackIndex) {
+          syncEditor();
+        }
+      });
+      slotLabel.append(name, select);
+      slotsWrapper.appendChild(slotLabel);
+      slotSelects.push(select);
+    });
+
+    card.addEventListener('click', (event) => {
+      if (event.target.closest('select')) return;
+      selected.trackIndex = trackIndex;
+      ensureSelectionBounds();
+      syncTracks();
+      syncEditor();
+    });
+
+    return { root: card, slotSelects };
+  }
+
+  function syncTrackSelection() {
+    trackSlotViews.forEach((view, index) => {
+      if (!view) return;
+      view.root.classList.toggle('tracker-track-card--active', index === selected.trackIndex);
+    });
+    trackViews.forEach((view, index) => {
+      if (!view) return;
+      view.section.classList.toggle('tracker-track--active', index === selected.trackIndex);
+    });
+  }
+
   function buildTrackView(track, trackIndex) {
     const section = document.createElement('article');
     section.className = 'tracker-track';
@@ -353,37 +457,6 @@ export function createTrackerPanel(initialAudioConfig = {}, { onChange, onSample
     const heading = document.createElement('h5');
     heading.textContent = track.name ?? `Track ${trackIndex + 1}`;
     headerRow.appendChild(heading);
-
-    const slotsWrapper = document.createElement('div');
-    slotsWrapper.className = 'tracker-track__slots';
-    const slotSelects = [];
-    track.sampleSlots.forEach((slot, slotIndex) => {
-      const slotLabel = document.createElement('label');
-      slotLabel.className = 'tracker-slot';
-      const name = document.createElement('span');
-      name.className = 'tracker-slot__name';
-      name.textContent = `Slot ${slotIndex + 1}`;
-      const select = document.createElement('select');
-      const emptyOption = createOption('', 'Empty');
-      select.appendChild(emptyOption);
-      audioConfig.sampleLibrary.forEach((sample) => {
-        select.appendChild(createOption(sample.id, sample.name));
-      });
-      select.value = slot.sampleId ?? '';
-      select.addEventListener('change', () => {
-        const nextValue = select.value || null;
-        audioConfig.tracks[trackIndex].sampleSlots[slotIndex].sampleId = nextValue;
-        emitChange();
-        syncTrack(trackIndex);
-        if (selected.trackIndex === trackIndex) {
-          syncEditor();
-        }
-      });
-      slotLabel.append(name, select);
-      slotsWrapper.appendChild(slotLabel);
-      slotSelects.push(select);
-    });
-    headerRow.appendChild(slotsWrapper);
     section.appendChild(headerRow);
 
     const grid = document.createElement('div');
@@ -413,10 +486,7 @@ export function createTrackerPanel(initialAudioConfig = {}, { onChange, onSample
     });
     section.appendChild(grid);
 
-    const editor = createStepEditor(trackIndex);
-    section.appendChild(editor.root);
-
-    return { section, slotSelects, stepButtons, stepLabels, editor, grid };
+    return { section, heading, stepButtons, stepLabels, grid };
   }
 
   function buildTracks() {
@@ -430,10 +500,10 @@ export function createTrackerPanel(initialAudioConfig = {}, { onChange, onSample
   }
 
   function syncSlotOptions(trackIndex) {
-    const view = trackViews[trackIndex];
-    if (!view) return;
+    const slotView = trackSlotViews[trackIndex];
     const track = audioConfig.tracks[trackIndex];
-    view.slotSelects.forEach((select, slotIndex) => {
+    if (!slotView || !track) return;
+    slotView.slotSelects.forEach((select, slotIndex) => {
       select.innerHTML = '';
       select.appendChild(createOption('', 'Empty'));
       audioConfig.sampleLibrary.forEach((sample) => {
@@ -470,7 +540,7 @@ export function createTrackerPanel(initialAudioConfig = {}, { onChange, onSample
     audioConfig.tracks.forEach((_, index) => syncTrack(index));
   }
 
-  function createStepEditor(trackIndex) {
+  function createStepEditor() {
     const root = document.createElement('div');
     root.className = 'tracker-step-editor';
 
@@ -574,7 +644,7 @@ export function createTrackerPanel(initialAudioConfig = {}, { onChange, onSample
       if (!step) return;
       step.enabled = enableToggle.checked;
       emitChange();
-      syncTrack(trackIndex);
+      syncTrack(selected.trackIndex);
       syncEditor();
     });
 
@@ -583,7 +653,7 @@ export function createTrackerPanel(initialAudioConfig = {}, { onChange, onSample
       if (!step) return;
       step.sampleSlot = Number.parseInt(sampleSelect.value, 10) || 0;
       emitChange();
-      syncTrack(trackIndex);
+      syncTrack(selected.trackIndex);
       syncEditor();
     });
 
@@ -615,7 +685,7 @@ export function createTrackerPanel(initialAudioConfig = {}, { onChange, onSample
       if (!step) return;
       step.pan = Number.parseFloat(panInput.value) || 0;
       emitChange();
-      syncTrack(trackIndex);
+      syncTrack(selected.trackIndex);
     });
 
     reverseToggle.addEventListener('change', () => {
@@ -650,47 +720,48 @@ export function createTrackerPanel(initialAudioConfig = {}, { onChange, onSample
 
   function syncEditor() {
     ensureSelectionBounds();
+    syncTrackSelection();
+
+    if (!stepEditor) return;
+
     const track = getSelectedTrack();
-    if (!track) return;
-    const view = trackViews[selected.trackIndex];
-    if (!view) return;
     const step = getSelectedStep();
-    if (!step) {
-      view.editor.root.classList.add('tracker-step-editor--hidden');
+    if (!track || !step) {
+      stepEditor.root.classList.add('tracker-step-editor--hidden');
       return;
     }
 
-    view.editor.root.classList.remove('tracker-step-editor--hidden');
-    view.editor.title.textContent = `${track.name ?? 'Track'} • Step ${selected.stepIndex + 1}`;
+    stepEditor.root.classList.remove('tracker-step-editor--hidden');
+    stepEditor.title.textContent = `${track.name ?? 'Track'} • Step ${selected.stepIndex + 1}`;
 
-    view.editor.enableToggle.checked = Boolean(step.enabled);
+    stepEditor.enableToggle.checked = Boolean(step.enabled);
 
-    view.editor.sampleSelect.innerHTML = '';
+    stepEditor.sampleSelect.innerHTML = '';
     track.sampleSlots.forEach((_, slotIndex) => {
-      view.editor.sampleSelect.appendChild(createOption(String(slotIndex), getSampleSlotLabel(audioConfig, track, slotIndex)));
+      stepEditor.sampleSelect.appendChild(createOption(String(slotIndex), getSampleSlotLabel(audioConfig, track, slotIndex)));
     });
-    view.editor.sampleSelect.value = String(step.sampleSlot ?? 0);
+    stepEditor.sampleSelect.value = String(step.sampleSlot ?? 0);
 
-    view.editor.pitchInput.value = String(step.pitch ?? 0);
-    view.editor.pitchValue.textContent = formatPitch(step.pitch ?? 0);
+    stepEditor.pitchInput.value = String(step.pitch ?? 0);
+    stepEditor.pitchValue.textContent = formatPitch(step.pitch ?? 0);
 
-    view.editor.volumeInput.value = String(step.volume ?? 1);
-    view.editor.volumeValue.textContent = formatVolume(step.volume ?? 1);
+    stepEditor.volumeInput.value = String(step.volume ?? 1);
+    stepEditor.volumeValue.textContent = formatVolume(step.volume ?? 1);
 
-    view.editor.panInput.value = String(step.pan ?? 0);
-    view.editor.panValue.textContent = formatPan(step.pan ?? 0);
+    stepEditor.panInput.value = String(step.pan ?? 0);
+    stepEditor.panValue.textContent = formatPan(step.pan ?? 0);
 
-    view.editor.reverseToggle.checked = Boolean(step.reverse);
-    view.editor.modSelect.value = step.mod ?? 'none';
+    stepEditor.reverseToggle.checked = Boolean(step.reverse);
+    stepEditor.modSelect.value = step.mod ?? 'none';
 
     const disabled = !step.enabled;
     [
-      view.editor.sampleSelect,
-      view.editor.pitchInput,
-      view.editor.volumeInput,
-      view.editor.panInput,
-      view.editor.reverseToggle,
-      view.editor.modSelect
+      stepEditor.sampleSelect,
+      stepEditor.pitchInput,
+      stepEditor.volumeInput,
+      stepEditor.panInput,
+      stepEditor.reverseToggle,
+      stepEditor.modSelect
     ].forEach((control) => {
       control.disabled = disabled;
     });
@@ -699,6 +770,7 @@ export function createTrackerPanel(initialAudioConfig = {}, { onChange, onSample
   function syncAll() {
     ensureSelectionBounds();
     updateLibrary();
+    buildSlotGrid();
     buildTracks();
     updateTimelineMeta();
     syncTracks();

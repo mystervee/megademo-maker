@@ -185,19 +185,51 @@ button.playback-toggle:hover {
 .tracker__editor-layout {
   display: grid;
   gap: 1rem;
+  align-items: stretch;
+}
+
+.tracker__slot-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1fr;
+  grid-auto-rows: 1fr;
+}
+
+.tracker__slot-grid .tracker-track-card {
+  height: 100%;
+}
+
+.tracker__step-editor-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background: rgba(5, 3, 15, 0.55);
+  border: 1px solid rgba(248, 247, 255, 0.08);
+  border-radius: 12px;
+  padding: 1rem;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
+}
+
+.tracker__step-editor-container .tracker-step-editor {
+  height: 100%;
+}
+
+@media (min-width: 640px) {
+  .tracker__slot-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (min-width: 880px) {
   .tracker__editor-layout {
-    grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
-    align-items: start;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 .tracker__tracks {
   display: grid;
   gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: 1fr;
 }
 
 .tracker__tracks-heading {
@@ -330,10 +362,17 @@ button.playback-toggle:hover {
   box-shadow: 0 0 30px rgba(0, 0, 0, 0.35);
 }
 
+.tracker-track--active {
+  border-color: rgba(132, 94, 247, 0.45);
+  box-shadow: 0 0 24px rgba(132, 94, 247, 0.25);
+}
+
 .tracker-track__header {
   display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
 }
 
 .tracker-track__header h5 {
@@ -517,7 +556,7 @@ button.playback-toggle:hover {
 .tracker__tracks {
   display: grid;
   gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: 1fr;
 }
 
 .tracker__editor {
@@ -562,6 +601,7 @@ button.playback-toggle:hover {
 .tracker-track-card__slots {
   display: grid;
   gap: 0.6rem;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
 }
 
 .tracker__timeline {
