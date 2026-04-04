@@ -22,7 +22,7 @@ function createGroup(title) {
   return { element: group, content };
 }
 
-function createLabeledInput({ label, type = 'text', value, min, max, step, multiline = false }) {
+function createLabeledInput({ label, type = 'text', value, min, max, step, multiline = false, checked = false }) {
   const wrapper = document.createElement('label');
   wrapper.textContent = label;
 
@@ -33,7 +33,9 @@ function createLabeledInput({ label, type = 'text', value, min, max, step, multi
   } else {
     input = document.createElement('input');
     input.type = type;
-    if (type === 'range' && typeof value === 'number') {
+    if (type === 'checkbox') {
+      input.checked = Boolean(checked);
+    } else if (type === 'range' && typeof value === 'number') {
       input.value = String(value);
     } else {
       input.value = value ?? '';
@@ -78,163 +80,382 @@ function deepMerge(target, source) {
   return output;
 }
 
-export function createControlPanel(container, initialConfig, { onChange, onAudioToggle, onSamplePreview }) {
+export function createControlPanel(container, initialConfig, { onChange, onPlaybackToggle, onSamplePreview }) {
   let config = clone(initialConfig);
+  let currentStep = 1;
+  let currentPartTab = 0;
+  let playbackState = { isPlaying: false, currentIndex: 0, totalParts: 1 };
+
   container.innerHTML = '';
+  container.className = 'wizard-container';
 
-  const playbackButton = document.createElement('button');
-  playbackButton.type = 'button';
-  playbackButton.className = 'playback-toggle';
-  playbackButton.textContent = 'Play Tracker Loop';
-  playbackButton.addEventListener('click', () => {
-    onAudioToggle();
+  if (!config.globalTune) {
+    config.globalTune = {
+      steps: Array.from({ length: 64 }, () => ({
+        channels: Array.from({ length: 5 }, () => ({
+          sampleId: null,
+          pitch: 0,
+          volume: 1
+        }))
+      })),
+      trackEffects: Array.from({ length: 5 }, () => ({
+        reverb: 0,
+        delay: 0,
+        filter: 0
+      }))
+    };
+  }
+
+  // Setup main navigation
+  const nav = document.createElement('nav');
+  nav.className = 'wizard-nav';
+  nav.style.display = 'flex';
+  nav.style.gap = '10px';
+  nav.style.marginBottom = '20px';
+
+  const steps = ['1. Setup', '2. Sound Tracker', '3. Configure Parts', '4. Playback', '5. Export'];
+  const navButtons = steps.map((text, idx) => {
+    const btn = document.createElement('button');
+    btn.textContent = text;
+    btn.className = 'wizard-nav__btn';
+    btn.addEventListener('click', () => {
+      currentStep = idx + 1;
+      onChange(config, currentStep, currentPartTab);
+      render();
+    });
+    nav.appendChild(btn);
+    return btn;
   });
 
-  const demoGroup = createGroup('Main Demo Settings');
-  const { wrapper: groupNameWrapper, input: groupNameInput } = createLabeledInput({
-    label: 'Group Name',
-    value: config.groupName ?? ''
-  });
-  groupNameInput.addEventListener('input', () => {
-    updateConfig({ groupName: groupNameInput.value });
-  });
-  demoGroup.content.appendChild(groupNameWrapper);
+  const content = document.createElement('div');
+  content.className = 'wizard-content';
+  container.append(nav, content);
 
-  const { wrapper: themeWrapper, select: themeSelect } = createSelect({
-    label: 'Theme',
-    value: config.theme ?? 'crt',
-    options: [
-      { value: 'light', label: 'Light' },
-      { value: 'dark', label: 'Dark' },
-      { value: 'crt', label: 'CRT' },
-      { value: 'custom', label: 'Custom' }
-    ]
-  });
-  themeSelect.addEventListener('change', () => {
-    updateConfig({ theme: themeSelect.value });
-  });
-  demoGroup.content.appendChild(themeWrapper);
-
-  const scrollerGroup = createGroup('Rolling Message');
-  const { wrapper: messageWrapper, input: messageInput } = createLabeledInput({
-    label: 'Message Text',
-    value: config.scroller?.messageText ?? '',
-    multiline: true
-  });
-  messageInput.addEventListener('input', () => {
-    updateConfig({ scroller: { messageText: messageInput.value } });
-  });
-  scrollerGroup.content.appendChild(messageWrapper);
-
-  const { wrapper: messageSpeedWrapper, input: messageSpeedInput } = createLabeledInput({
-    label: 'Scroll Speed',
-    type: 'range',
-    min: 0.5,
-    max: 6,
-    step: 0.1,
-    value: config.scroller?.messageSpeed ?? 2.5
-  });
-  messageSpeedInput.addEventListener('input', () => {
-    updateConfig({ scroller: { messageSpeed: Number.parseFloat(messageSpeedInput.value) } });
-  });
-  scrollerGroup.content.appendChild(messageSpeedWrapper);
-
-  const visualGroup = createGroup('Visual Effects');
-  const { wrapper: bobCountWrapper, input: bobCountInput } = createLabeledInput({
-    label: 'Bobs Count',
-    type: 'range',
-    min: 4,
-    max: 64,
-    step: 1,
-    value: config.visual?.bobs?.bobCount ?? 24
-  });
-  bobCountInput.addEventListener('input', () => {
-    updateConfig({ visual: { bobs: { bobCount: Number.parseInt(bobCountInput.value, 10) } } });
-  });
-  visualGroup.content.appendChild(bobCountWrapper);
-
-  const { wrapper: bobSpeedWrapper, input: bobSpeedInput } = createLabeledInput({
-    label: 'Bobs Speed',
-    type: 'range',
-    min: 0.2,
-    max: 3,
-    step: 0.1,
-    value: config.visual?.bobs?.bobSpeed ?? 1.2
-  });
-  bobSpeedInput.addEventListener('input', () => {
-    updateConfig({ visual: { bobs: { bobSpeed: Number.parseFloat(bobSpeedInput.value) } } });
-  });
-  visualGroup.content.appendChild(bobSpeedWrapper);
-
-  const { wrapper: plasmaIntensityWrapper, input: plasmaIntensityInput } = createLabeledInput({
-    label: 'Plasma Intensity',
-    type: 'range',
-    min: 0.2,
-    max: 1.2,
-    step: 0.05,
-    value: config.visual?.plasma?.plasmaIntensity ?? 0.85
-  });
-  plasmaIntensityInput.addEventListener('input', () => {
-    updateConfig({ visual: { plasma: { plasmaIntensity: Number.parseFloat(plasmaIntensityInput.value) } } });
-  });
-  visualGroup.content.appendChild(plasmaIntensityWrapper);
-
-  const { wrapper: starSpeedWrapper, input: starSpeedInput } = createLabeledInput({
-    label: 'Star Speed',
-    type: 'range',
-    min: 0.2,
-    max: 4,
-    step: 0.1,
-    value: config.visual?.starfield?.starSpeed ?? 1.4
-  });
-  starSpeedInput.addEventListener('input', () => {
-    updateConfig({ visual: { starfield: { starSpeed: Number.parseFloat(starSpeedInput.value) } } });
-  });
-  visualGroup.content.appendChild(starSpeedWrapper);
-
-  const audioGroup = createGroup('Audio');
-  audioGroup.content.appendChild(playbackButton);
-
-  const trackerPanel = createTrackerPanel(config.audio ?? {}, {
-    onChange: (nextAudioConfig) => {
-      updateConfig({ audio: nextAudioConfig });
+  let trackerPanelInstance = createTrackerPanel(config, {
+    onChange: (updatedTracker) => {
+      updateConfig({ globalTune: updatedTracker.globalTune });
     },
-    onSamplePreview: (sampleId) => {
-      if (typeof onSamplePreview === 'function') {
-        onSamplePreview(sampleId);
-      }
-    }
+    onSamplePreview
   });
 
-  audioGroup.content.appendChild(trackerPanel.element);
+  function syncPartsArray() {
+    if (!config.parts) config.parts = [];
+    const defaultPart = {
+      durationInSeconds: 10,
+      visual: { bobs: {}, plasma: {}, starfield: {} },
+      scroller: {},
+      audio: { tracks: [], sampleLibrary: [] },
+      transition: 'cut'
+    };
 
-  container.append(demoGroup.element, scrollerGroup.element, visualGroup.element, audioGroup.element);
+    while (config.parts.length < (config.numberOfParts || 1)) {
+      config.parts.push(clone(defaultPart));
+    }
+    if (config.parts.length > (config.numberOfParts || 1)) {
+      config.parts.length = config.numberOfParts;
+    }
+    if (currentPartTab >= config.numberOfParts) {
+      currentPartTab = Math.max(0, config.numberOfParts - 1);
+    }
+  }
 
   function updateConfig(partial) {
     config = deepMerge(config, partial);
-    onChange(config);
+    syncPartsArray();
+    onChange(config, currentStep, currentPartTab);
   }
+
+  // --- STEP 1: SETUP ---
+  function renderSetup() {
+    const group = createGroup('Global Setup');
+
+    const { wrapper: nameWrapper, input: nameInput } = createLabeledInput({
+      label: 'Group Name',
+      value: config.globalSettings?.groupName ?? config.groupName ?? ''
+    });
+    nameInput.addEventListener('change', () => {
+      updateConfig({ globalSettings: { groupName: nameInput.value } });
+    });
+
+    const { wrapper: bpmWrapper, input: bpmInput } = createLabeledInput({
+      label: 'Master BPM',
+      type: 'number',
+      min: 40, max: 300, step: 1,
+      value: config.globalSettings?.bpm ?? 120
+    });
+    bpmInput.addEventListener('change', () => {
+      updateConfig({ globalSettings: { bpm: Number.parseInt(bpmInput.value, 10) } });
+    });
+
+    const { wrapper: partsWrapper, input: partsInput } = createLabeledInput({
+      label: 'Number of Parts (1-4)',
+      type: 'range',
+      min: 1, max: 4, step: 1,
+      value: config.numberOfParts ?? 1
+    });
+    const partsDisplay = document.createElement('span');
+    partsDisplay.textContent = ` ${partsInput.value}`;
+    partsDisplay.style.marginLeft = '8px';
+    partsWrapper.appendChild(partsDisplay);
+
+    partsInput.addEventListener('change', () => {
+      updateConfig({ numberOfParts: Number.parseInt(partsInput.value, 10) });
+      partsDisplay.textContent = ` ${partsInput.value}`;
+    });
+    partsInput.addEventListener('input', () => {
+      partsDisplay.textContent = ` ${partsInput.value}`;
+    });
+
+    group.content.append(nameWrapper, bpmWrapper, partsWrapper);
+    content.appendChild(group.element);
+  }
+
+  // --- STEP 2: SOUND TRACKER ---
+  function renderSoundTracker() {
+    const group = createGroup('Global Tune Settings');
+    group.content.style.height = '400px';
+    
+    trackerPanelInstance.update(config);
+    group.content.appendChild(trackerPanelInstance.element);
+    content.appendChild(group.element);
+  }
+
+  // --- STEP 3: CONFIGURE PARTS ---
+  function renderConfigureParts() {
+    const header = document.createElement('div');
+    header.className = 'wizard-parts-nav';
+    header.style.display = 'flex';
+    header.style.gap = '8px';
+    header.style.marginBottom = '16px';
+
+    // Dynamically generate sub-tabs based on numberOfParts
+    for (let i = 0; i < config.numberOfParts; i++) {
+      const btn = document.createElement('button');
+      btn.textContent = `Part ${i + 1}`;
+      btn.className = `wizard-parts-nav__btn ${i === currentPartTab ? 'active' : ''}`;
+      if (i === currentPartTab) {
+        btn.style.fontWeight = 'bold';
+        btn.style.textDecoration = 'underline';
+      }
+      btn.addEventListener('click', () => {
+        currentPartTab = i;
+        onChange(config, currentStep, currentPartTab);
+        render(); // Rerender to show the active part tab
+      });
+      header.appendChild(btn);
+    }
+    content.appendChild(header);
+
+    const part = config.parts[currentPartTab];
+    if (!part) return;
+
+    const partGroup = createGroup(`Settings for Part ${currentPartTab + 1}`);
+
+    const { wrapper: durationWrapper, input: durationInput } = createLabeledInput({
+      label: 'Duration (Seconds)',
+      type: 'number',
+      min: 1, max: 300, step: 1,
+      value: part.durationInSeconds ?? 10
+    });
+    durationInput.addEventListener('change', () => {
+      const newParts = clone(config.parts);
+      newParts[currentPartTab].durationInSeconds = Number.parseInt(durationInput.value, 10);
+      updateConfig({ parts: newParts });
+    });
+
+    const { wrapper: transitionWrapper, select: transitionSelect } = createSelect({
+      label: 'Transition to Next Part',
+      value: part.transition ?? 'cut',
+      options: [
+        { value: 'cut', label: 'Cut' },
+        { value: 'crossfade', label: 'Crossfade' },
+        { value: 'wipe', label: 'Wipe' }
+      ]
+    });
+    transitionSelect.addEventListener('change', () => {
+      const newParts = clone(config.parts);
+      newParts[currentPartTab].transition = transitionSelect.value;
+      updateConfig({ parts: newParts });
+    });
+
+    const { wrapper: messageWrapper, input: messageInput } = createLabeledInput({
+      label: 'Scroller Text',
+      value: part.scroller?.messageText ?? '',
+      multiline: true
+    });
+    messageInput.addEventListener('change', () => {
+      const newParts = clone(config.parts);
+      if (!newParts[currentPartTab].scroller) newParts[currentPartTab].scroller = {};
+      newParts[currentPartTab].scroller.messageText = messageInput.value;
+      updateConfig({ parts: newParts });
+    });
+
+    const { wrapper: plasmaWrapper, input: plasmaInput } = createLabeledInput({
+      label: 'Enable Plasma',
+      type: 'checkbox',
+      checked: part.plasmaEnabled ?? false
+    });
+    plasmaInput.addEventListener('change', () => {
+      const newParts = clone(config.parts);
+      newParts[currentPartTab].plasmaEnabled = plasmaInput.checked;
+      updateConfig({ parts: newParts });
+    });
+
+    const { wrapper: bobsWrapper, input: bobsInput } = createLabeledInput({
+      label: 'Enable Bobs',
+      type: 'checkbox',
+      checked: part.bobsEnabled ?? false
+    });
+    bobsInput.addEventListener('change', () => {
+      const newParts = clone(config.parts);
+      newParts[currentPartTab].bobsEnabled = bobsInput.checked;
+      updateConfig({ parts: newParts });
+    });
+
+    const { wrapper: starfieldWrapper, input: starfieldInput } = createLabeledInput({
+      label: 'Enable Starfield',
+      type: 'checkbox',
+      checked: part.starfieldEnabled ?? false
+    });
+    starfieldInput.addEventListener('change', () => {
+      const newParts = clone(config.parts);
+      newParts[currentPartTab].starfieldEnabled = starfieldInput.checked;
+      updateConfig({ parts: newParts });
+    });
+
+    const { wrapper: vectorsEnabledWrapper, input: vectorsEnabledInput } = createLabeledInput({
+      label: 'Enable Vectors',
+      type: 'checkbox',
+      checked: part.vectorsEnabled ?? false
+    });
+    vectorsEnabledInput.addEventListener('change', () => {
+      const newParts = clone(config.parts);
+      newParts[currentPartTab].vectorsEnabled = vectorsEnabledInput.checked;
+      updateConfig({ parts: newParts });
+    });
+
+    const { wrapper: vectorTypeWrapper, select: vectorTypeSelect } = createSelect({
+      label: 'Vector Type',
+      value: part.visual?.vector?.vectorType ?? 'cube',
+      options: [
+        { value: 'cube', label: 'Cube' },
+        { value: 'pyramid', label: 'Pyramid' }
+      ]
+    });
+    vectorTypeSelect.addEventListener('change', () => {
+      const newParts = clone(config.parts);
+      if (!newParts[currentPartTab].visual) newParts[currentPartTab].visual = {};
+      if (!newParts[currentPartTab].visual.vector) newParts[currentPartTab].visual.vector = {};
+      newParts[currentPartTab].visual.vector.vectorType = vectorTypeSelect.value;
+      updateConfig({ parts: newParts });
+    });
+
+    const { wrapper: vectorStyleWrapper, select: vectorStyleSelect } = createSelect({
+      label: 'Vector Style',
+      value: part.visual?.vector?.vectorStyle ?? 'wireframe',
+      options: [
+        { value: 'wireframe', label: 'Wireframe' },
+        { value: 'filled', label: 'Filled' }
+      ]
+    });
+    vectorStyleSelect.addEventListener('change', () => {
+      const newParts = clone(config.parts);
+      if (!newParts[currentPartTab].visual) newParts[currentPartTab].visual = {};
+      if (!newParts[currentPartTab].visual.vector) newParts[currentPartTab].visual.vector = {};
+      newParts[currentPartTab].visual.vector.vectorStyle = vectorStyleSelect.value;
+      updateConfig({ parts: newParts });
+    });
+
+    partGroup.content.append(
+      durationWrapper,
+      transitionWrapper,
+      messageWrapper,
+      plasmaWrapper,
+      bobsWrapper,
+      starfieldWrapper,
+      vectorsEnabledWrapper,
+      vectorTypeWrapper,
+      vectorStyleWrapper
+    );
+    content.appendChild(partGroup.element);
+  }
+
+  // --- STEP 4: PLAYBACK ---
+  function renderPlayback() {
+    const group = createGroup('Playback Controls');
+    
+    const statusText = document.createElement('p');
+    statusText.className = 'playback-status';
+    statusText.style.fontWeight = 'bold';
+    statusText.style.marginBottom = '16px';
+    statusText.textContent = playbackState.isPlaying 
+      ? `Now Playing: Part ${playbackState.currentIndex + 1} of ${playbackState.totalParts}` 
+      : 'Ready to play sequence.';
+
+    const playbackButton = document.createElement('button');
+    playbackButton.type = 'button';
+    playbackButton.className = 'playback-toggle';
+    playbackButton.textContent = playbackState.isPlaying ? 'Stop Sequence' : 'Play Full Sequence';
+    playbackButton.addEventListener('click', () => {
+      onPlaybackToggle();
+    });
+    group.content.append(statusText, playbackButton);
+    content.appendChild(group.element);
+  }
+
+  // --- STEP 5: EXPORT ---
+  function renderExport() {
+    const group = createGroup('Export Options');
+    const p = document.createElement('p');
+    p.textContent = 'Export functionality (e.g., video recording, social sharing) will be implemented here.';
+    group.content.appendChild(p);
+    content.appendChild(group.element);
+  }
+
+  function render() {
+    navButtons.forEach((btn, idx) => {
+      if (currentStep === idx + 1) {
+        btn.classList.add('active');
+        btn.style.fontWeight = 'bold';
+        btn.style.borderBottom = '2px solid currentColor';
+      } else {
+        btn.classList.remove('active');
+        btn.style.fontWeight = 'normal';
+        btn.style.borderBottom = 'none';
+      }
+    });
+
+    content.innerHTML = '';
+    if (currentStep === 1) renderSetup();
+    else if (currentStep === 2) renderSoundTracker();
+    else if (currentStep === 3) renderConfigureParts();
+    else if (currentStep === 4) renderPlayback();
+    else if (currentStep === 5) renderExport();
+  }
+
+  syncPartsArray();
+  render();
 
   function update(newConfig) {
     config = clone(newConfig);
-    groupNameInput.value = config.groupName ?? '';
-    themeSelect.value = config.theme ?? 'crt';
-    messageInput.value = config.scroller?.messageText ?? '';
-    messageSpeedInput.value = String(config.scroller?.messageSpeed ?? 2.5);
-    bobCountInput.value = String(config.visual?.bobs?.bobCount ?? 24);
-    bobSpeedInput.value = String(config.visual?.bobs?.bobSpeed ?? 1.2);
-    plasmaIntensityInput.value = String(config.visual?.plasma?.plasmaIntensity ?? 0.85);
-    starSpeedInput.value = String(config.visual?.starfield?.starSpeed ?? 1.4);
-    trackerPanel.update(config.audio ?? {});
+    syncPartsArray();
+    render(); // Re-render to update currently active step/inputs
   }
 
-  function setAudioState(isPlaying) {
-    playbackButton.textContent = isPlaying ? 'Stop Tracker Loop' : 'Play Tracker Loop';
+  function setPlaybackState(isPlaying, currentIndex = 0, totalParts = 1) {
+    playbackState = { isPlaying, currentIndex, totalParts };
+    const playBtn = content.querySelector('.playback-toggle');
+    const statusText = content.querySelector('.playback-status');
+    if (playBtn) {
+      playBtn.textContent = isPlaying ? 'Stop Sequence' : 'Play Full Sequence';
+    }
+    if (statusText) {
+      statusText.textContent = isPlaying ? `Now Playing: Part ${currentIndex + 1} of ${totalParts}` : 'Ready to play sequence.';
+    }
   }
 
   return {
     update,
-    setAudioState
+    setPlaybackState
   };
 }
-

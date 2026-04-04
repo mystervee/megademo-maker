@@ -16,23 +16,59 @@ async function loadConfig() {
   } catch (error) {
     console.error('Failed to load config.json, using defaults.', error);
     return {
-      groupName: 'Megademo Crew',
-      theme: 'crt',
-      visual: {
-        bobs: {},
-        plasma: {},
-        starfield: {}
-      },
-      scroller: {},
-      audio: {
+      globalSettings: {
+        groupName: 'Megademo Crew',
         bpm: 120,
-        swing: 0,
-        stepsPerBar: 8,
-        timeDivision: 2,
-        loop: true,
-        sampleLibrary: [],
-        tracks: []
-      }
+        masterVolume: 1.0
+      },
+      globalTune: {
+        steps: Array.from({ length: 64 }, () => ({
+          channels: Array.from({ length: 5 }, () => ({
+            sampleId: null,
+            pitch: 0,
+            volume: 1
+          }))
+        })),
+        trackEffects: Array.from({ length: 5 }, () => ({
+          reverb: 0,
+          delay: 0,
+          filter: 0
+        }))
+      },
+      numberOfParts: 1,
+      parts: [
+        {
+          visual: {
+            bobs: {},
+            plasma: {},
+            starfield: {},
+            vector: {}
+          },
+          scroller: {},
+          audio: {
+            tracks: [],
+            sampleLibrary: [
+              { id: 'synth-1', name: 'Synth/Bass' },
+              { id: 'synth-2', name: 'Synth/Bass' },
+              { id: 'synth-3', name: 'Synth/Bass' },
+              { id: 'synth-4', name: 'Synth/Bass' },
+              { id: 'synth-5', name: 'Synth/Bass' },
+              { id: 'synth-6', name: 'Synth/Bass' },
+              { id: 'synth-7', name: 'Synth/Bass' },
+              { id: 'synth-8', name: 'Synth/Bass' },
+              { id: 'drum-1', name: 'Drum/Perc' },
+              { id: 'drum-2', name: 'Drum/Perc' },
+              { id: 'drum-3', name: 'Drum/Perc' },
+              { id: 'drum-4', name: 'Drum/Perc' },
+              { id: 'drum-5', name: 'Drum/Perc' },
+              { id: 'drum-6', name: 'Drum/Perc' },
+              { id: 'drum-7', name: 'Drum/Perc' },
+              { id: 'drum-8', name: 'Drum/Perc' }
+            ]
+          },
+          transition: 'cut'
+        }
+      ]
     };
   }
 }
@@ -59,19 +95,33 @@ class MegademoApp {
     this.controls = null;
     this.resizeObserver = null;
     this.onWindowResize = null;
+    this.isPlaying = false;
+    this.currentPlayingIndex = 0;
+    this.partStartTime = 0;
+    this.currentStep = 1;
+    this.currentPartTab = 0;
   }
 
   async init() {
     this.config = await loadConfig();
-    this.effects = createEffectsSuite(this.canvas, this.config);
+    
+    let initialPreviewConfig = this.config.parts && this.config.parts.length > 0 ? this.config.parts[0] : this.config;
+    initialPreviewConfig = { ...initialPreviewConfig, groupName: this.config.globalSettings?.groupName ?? this.config.groupName };
+    this.effects = createEffectsSuite(this.canvas, initialPreviewConfig, (timestamp) => {
+      this.onRenderFrame(timestamp);
+    });
     this.audioEngine = createAudioEngine(this.config.audio ?? {});
 
     this.controls = createControlPanel(this.controlContainer, this.config, {
-      onChange: (updatedConfig) => {
-        this.applyConfig(updatedConfig);
+      onChange: (updatedConfig, currentStep, currentPartTab) => {
+        this.applyConfig(updatedConfig, currentStep, currentPartTab);
       },
-      onAudioToggle: () => {
-        this.toggleAudio();
+      onPlaybackToggle: () => {
+        if (this.isPlaying) {
+          this.stopSequence();
+        } else {
+          this.startSequence();
+        }
       },
       onSamplePreview: (sampleId) => {
         if (!sampleId) return;
@@ -79,16 +129,91 @@ class MegademoApp {
       }
     });
 
-    this.controls.setAudioState(false);
+    this.controls.setPlaybackState(false);
     this.updateGroupName();
     this.setupResizeHandling();
     this.effects.resize();
     this.effects.start();
   }
 
-  applyConfig(nextConfig) {
+  onRenderFrame(timestamp) {
+    if (!this.isPlaying) return;
+    
+    const totalParts = this.config.numberOfParts || 1;
+    const part = this.config.parts[this.currentPlayingIndex];
+    if (!part) return;
+
+    const durationSeconds = part.durationInSeconds ?? 10;
+    const elapsed = timestamp - this.partStartTime;
+    
+    if (elapsed > durationSeconds * 1000) {
+      this.currentPlayingIndex++;
+      this.partStartTime = timestamp;
+      
+      if (this.currentPlayingIndex >= totalParts) {
+        this.stopSequence();
+        return;
+      }
+      
+      this.controls.setPlaybackState(this.isPlaying, this.currentPlayingIndex, totalParts);
+      const previewConfig = {
+        ...this.config.parts[this.currentPlayingIndex],
+        groupName: this.config.globalSettings?.groupName ?? this.config.groupName
+      };
+      this.effects.updateConfig(previewConfig);
+    }
+  }
+
+  startSequence() {
+    this.isPlaying = true;
+    this.currentPlayingIndex = 0;
+    this.partStartTime = performance.now();
+    
+    const totalParts = this.config.numberOfParts || 1;
+    this.controls.setPlaybackState(true, this.currentPlayingIndex, totalParts);
+    
+    if (!this.audioEngine.getState().isPlaying) {
+      this.audioEngine.start().catch(err => console.error(err));
+    }
+    
+    if (this.config.parts && this.config.parts.length > 0) {
+      const previewConfig = {
+        ...this.config.parts[this.currentPlayingIndex],
+        groupName: this.config.globalSettings?.groupName ?? this.config.groupName
+      };
+      this.effects.updateConfig(previewConfig);
+    }
+  }
+
+  stopSequence() {
+    this.isPlaying = false;
+    this.controls.setPlaybackState(false);
+    
+    if (this.audioEngine.getState().isPlaying) {
+      this.audioEngine.stop();
+    }
+    
+    this.applyConfig(this.config, this.currentStep, this.currentPartTab);
+  }
+
+  applyConfig(nextConfig, currentStep = 1, currentPartTab = 0) {
     this.config = deepMerge(this.config, nextConfig);
-    this.effects.updateConfig(this.config);
+    this.currentStep = currentStep;
+    this.currentPartTab = currentPartTab;
+    
+    let previewConfig = this.config;
+    if (this.isPlaying) {
+      previewConfig = this.config.parts[this.currentPlayingIndex] ?? this.config.parts[0];
+    } else if (this.config.parts && this.config.parts.length > 0) {
+      if (currentStep === 3 && this.config.parts[currentPartTab]) {
+        previewConfig = this.config.parts[currentPartTab];
+      } else {
+        previewConfig = this.config.parts[0];
+      }
+    }
+    previewConfig = { ...previewConfig, groupName: this.config.globalSettings?.groupName ?? this.config.groupName };
+
+    this.effects.updateConfig(previewConfig);
     this.audioEngine.updateConfig(this.config.audio ?? {});
     this.controls.update(this.config);
     this.updateGroupName();
@@ -98,21 +223,10 @@ class MegademoApp {
     const title = document.querySelector('.app__title');
     const subtitle = document.querySelector('.app__subtitle');
     if (title) {
-      title.textContent = `${this.config.groupName ?? 'Megademo Maker'}`;
+      title.textContent = 'MegaDemo Maker';
     }
     if (subtitle) {
       subtitle.textContent = 'Build retro scenes with bobs, plasma, starfields, and tracker beats.';
-    }
-  }
-
-  async toggleAudio() {
-    try {
-      await this.audioEngine.toggle();
-    } catch (error) {
-      console.error('Audio toggle failed', error);
-    } finally {
-      const { isPlaying } = this.audioEngine.getState();
-      this.controls.setAudioState(isPlaying);
     }
   }
 

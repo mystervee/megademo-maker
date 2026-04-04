@@ -53,16 +53,14 @@ export function createScroller(canvas, initialConfig = {}) {
 
     let x = offset;
     const y = canvas.height - 60;
-    const amplitude = messageWaveAmplitude;
-    const frequency = messageWaveFrequency;
 
     for (let i = 0; i < messageText.length; i += 1) {
       const char = messageText[i];
       const charWidth = ctx.measureText(char).width;
-      const waveOffset = Math.sin((x * frequency + time * 0.002) + i * 0.8) * amplitude;
+      const waveOffset = Math.sin(x * messageWaveFrequency + time * 0.005) * messageWaveAmplitude;
 
       ctx.fillText(char, x, y + waveOffset);
-      x += charWidth + 2;
+      x += charWidth; // Increment by character width to prevent overlap
     }
 
     ctx.restore();

@@ -1,788 +1,309 @@
-import { normalizeAudioConfig } from '../audio/index.js';
-
 const clone = (value) =>
   typeof structuredClone === 'function' ? structuredClone(value) : JSON.parse(JSON.stringify(value));
 
-const MOD_OPTIONS = [
-  { value: 'none', label: 'None (dry signal)' },
-  { value: 'lpf', label: 'Low-pass smooth' },
-  { value: 'hpf', label: 'High-pass snap' },
-  { value: 'bitcrush', label: 'Bitcrush grit' },
-  { value: 'chorus', label: 'Chorus doubler' },
-  { value: 'delay', label: 'Echo delay' }
+const DEFAULT_SAMPLE_LIBRARY = [
+  { id: 'synth-1', name: 'Synth/Bass' },
+  { id: 'synth-2', name: 'Synth/Bass' },
+  { id: 'synth-3', name: 'Synth/Bass' },
+  { id: 'synth-4', name: 'Synth/Bass' },
+  { id: 'synth-5', name: 'Synth/Bass' },
+  { id: 'synth-6', name: 'Synth/Bass' },
+  { id: 'synth-7', name: 'Synth/Bass' },
+  { id: 'synth-8', name: 'Synth/Bass' },
+  { id: 'drum-1', name: 'Drum/Perc' },
+  { id: 'drum-2', name: 'Drum/Perc' },
+  { id: 'drum-3', name: 'Drum/Perc' },
+  { id: 'drum-4', name: 'Drum/Perc' },
+  { id: 'drum-5', name: 'Drum/Perc' },
+  { id: 'drum-6', name: 'Drum/Perc' },
+  { id: 'drum-7', name: 'Drum/Perc' },
+  { id: 'drum-8', name: 'Drum/Perc' }
 ];
 
-const TIME_DIVISION_OPTIONS = [
-  { value: 1, label: 'Quarter (1/4)' },
-  { value: 2, label: 'Eighth (1/8)' },
-  { value: 3, label: 'Triplet (1/12)' },
-  { value: 4, label: 'Sixteenth (1/16)' },
-  { value: 6, label: 'Sixteenth Triplet (1/24)' },
-  { value: 8, label: 'Thirty-second (1/32)' }
-];
-
-function formatPitch(value) {
-  const numeric = Number.parseInt(value, 10) || 0;
-  if (numeric === 0) return '0 st';
-  return `${numeric > 0 ? '+' : ''}${numeric} st`;
-}
-
-function formatVolume(value) {
-  const numeric = Number.parseFloat(value);
-  return `${Math.round(clamp(numeric, 0, 2) * 100)}%`;
-}
-
-function formatPan(value) {
-  const numeric = Number.parseFloat(value) || 0;
-  if (Math.abs(numeric) < 0.01) return 'Center';
-  return numeric < 0 ? `Left ${Math.round(Math.abs(numeric) * 100)}%` : `Right ${Math.round(numeric * 100)}%`;
-}
-
-function clamp(value, min, max) {
-  return Math.min(Math.max(value, min), max);
-}
-
-function createOption(value, label) {
-  const option = document.createElement('option');
-  option.value = value;
-  option.textContent = label;
-  return option;
-}
-
-function getSampleById(audioConfig, sampleId) {
-  if (!sampleId) return null;
-  return audioConfig.sampleLibrary.find((sample) => sample.id === sampleId) ?? null;
-}
-
-function getSampleSlotLabel(audioConfig, track, slotIndex) {
-  const slot = track.sampleSlots?.[slotIndex];
-  if (!slot) return `Slot ${slotIndex + 1}`;
-  const sample = getSampleById(audioConfig, slot.sampleId);
-  if (!sample) return `Slot ${slotIndex + 1}: Empty`;
-  return `Slot ${slotIndex + 1}: ${sample.name}`;
-}
-
-function createLibraryCard(sample, onPreview) {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'tracker-sample';
-  button.style.setProperty('--sample-color', sample.color ?? '#48e5c2');
-
-  const name = document.createElement('span');
-  name.className = 'tracker-sample__name';
-  name.textContent = sample.name;
-
-  const meta = document.createElement('span');
-  meta.className = 'tracker-sample__meta';
-  meta.textContent = sample.category ?? '';
-
-  const description = document.createElement('span');
-  description.className = 'tracker-sample__description';
-  description.textContent = sample.description ?? '';
-
-  button.append(name, meta, description);
-
-  button.addEventListener('click', () => {
-    if (typeof onPreview === 'function') {
-      onPreview(sample.id);
-    }
-  });
-
-  return button;
-}
-
-function createStepButton(stepIndex) {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'tracker-step';
-  if ((stepIndex + 1) % 4 === 0) {
-    button.classList.add('tracker-step--bar');
-  }
-
-  const indexLabel = document.createElement('span');
-  indexLabel.className = 'tracker-step__index';
-  indexLabel.textContent = String(stepIndex + 1);
-
-  const sampleLabel = document.createElement('span');
-  sampleLabel.className = 'tracker-step__label';
-  sampleLabel.textContent = '';
-
-  button.append(indexLabel, sampleLabel);
-  return { button, sampleLabel };
-}
-
-function createEmptyStep() {
-  return {
-    enabled: false,
-    sampleSlot: 0,
-    pitch: 0,
-    volume: 1,
-    pan: 0,
-    reverse: false,
-    mod: 'none'
+export function createTrackerPanel(initialConfig = {}, { onChange, onSamplePreview } = {}) {
+  let trackerState = initialConfig.globalTune || {
+    steps: Array.from({ length: 64 }, () => ({
+      channels: Array.from({ length: 5 }, () => ({
+        sampleId: null,
+        pitch: 0,
+        volume: 1
+      }))
+    })),
+    trackEffects: Array.from({ length: 5 }, () => ({
+      reverb: 0,
+      delay: 0,
+      filter: 0
+    }))
   };
-}
 
-export function createTrackerPanel(initialAudioConfig = {}, { onChange, onSamplePreview } = {}) {
-  let audioConfig = normalizeAudioConfig(initialAudioConfig);
-  let selected = { trackIndex: 0, stepIndex: 0 };
-  const trackSlotViews = [];
-  const trackViews = [];
-  let stepEditor = null;
+  let sampleLibrary = initialConfig.audio?.sampleLibrary || initialConfig.sampleLibrary || [];
+  if (sampleLibrary.length === 0) {
+    sampleLibrary = clone(DEFAULT_SAMPLE_LIBRARY);
+  }
+  let activeSample = null;
 
   const root = document.createElement('div');
-  root.className = 'tracker';
+  root.className = 'tracker-ui';
+  root.style.display = 'flex';
+  root.style.flexDirection = 'row';
+  root.style.gap = '20px';
+  root.style.height = '100%';
 
-  const header = document.createElement('header');
-  header.className = 'tracker__header';
-  const title = document.createElement('h3');
-  title.textContent = 'Demo-Tracker';
-  const subtitle = document.createElement('p');
-  subtitle.textContent = 'Multi-track pattern editor with extendable 8-step blocks.';
-  header.append(title, subtitle);
-  root.appendChild(header);
+  const libraryContainer = document.createElement('div');
+  libraryContainer.className = 'tracker-library';
+  libraryContainer.style.width = '200px';
+  libraryContainer.style.borderRight = '1px solid #ccc';
+  libraryContainer.style.paddingRight = '10px';
+  libraryContainer.style.display = 'flex';
+  libraryContainer.style.flexDirection = 'column';
 
-  const libraryCard = document.createElement('section');
-  libraryCard.className = 'tracker__library-card tracker__panel';
-  const libraryHeading = document.createElement('h4');
+  const libraryHeading = document.createElement('h3');
   libraryHeading.textContent = 'Sample Library';
-  const libraryHint = document.createElement('p');
-  libraryHint.className = 'tracker__hint';
-  libraryHint.textContent = 'Click a card to preview and then assign it to a track slot.';
-  const libraryGrid = document.createElement('div');
-  libraryGrid.className = 'tracker-library__grid';
-  libraryCard.append(libraryHeading, libraryHint, libraryGrid);
-  root.appendChild(libraryCard);
+  libraryHeading.style.marginBottom = '10px';
+  libraryContainer.appendChild(libraryHeading);
 
-  const timelineSection = document.createElement('section');
-  timelineSection.className = 'tracker__timeline tracker__panel';
-  root.appendChild(timelineSection);
+  const libraryList = document.createElement('ul');
+  libraryList.style.listStyle = 'none';
+  libraryList.style.padding = '0';
+  libraryList.style.margin = '0';
+  libraryList.style.flex = '1';
+  libraryList.style.overflowY = 'auto';
 
-  const timelineHeader = document.createElement('header');
-  timelineHeader.className = 'tracker__timeline-header';
-  timelineSection.appendChild(timelineHeader);
+  function renderLibrary() {
+    libraryList.innerHTML = '';
+    sampleLibrary.forEach((sample) => {
+      const li = document.createElement('li');
+      li.textContent = sample.name || sample.id;
+      li.style.cursor = 'pointer';
+      li.style.padding = '8px';
+      li.style.borderRadius = '4px';
+      li.style.border = activeSample === sample.id ? '2px solid #48e5c2' : '1px solid #eee';
+      li.style.marginBottom = '5px';
+      li.style.backgroundColor = activeSample === sample.id ? 'rgba(72, 229, 194, 0.1)' : 'transparent';
+      li.addEventListener('click', () => {
+        activeSample = sample.id;
+        renderLibrary();
+        if (typeof onSamplePreview === 'function') {
+          onSamplePreview(sample.id);
+        }
+      });
+      libraryList.appendChild(li);
+    });
+  }
+  renderLibrary();
+  libraryContainer.appendChild(libraryList);
+  root.appendChild(libraryContainer);
 
-  const timelineTitle = document.createElement('h4');
-  timelineTitle.textContent = 'Pattern Steps';
-  timelineHeader.appendChild(timelineTitle);
+  const gridContainerWrapper = document.createElement('div');
+  gridContainerWrapper.style.display = 'flex';
+  gridContainerWrapper.style.flexDirection = 'row';
+  gridContainerWrapper.style.overflow = 'hidden';
+  gridContainerWrapper.style.width = '100%';
+  gridContainerWrapper.style.maxWidth = '100%';
+  gridContainerWrapper.style.minWidth = '0';
+  gridContainerWrapper.style.flex = '1';
 
-  const tempoControl = document.createElement('div');
-  tempoControl.className = 'tracker__tempo';
-  timelineHeader.appendChild(tempoControl);
+  const headersContainer = document.createElement('div');
+  headersContainer.className = 'tracker-headers';
+  headersContainer.style.display = 'flex';
+  headersContainer.style.flexDirection = 'column';
+  headersContainer.style.width = '200px';
+  headersContainer.style.flex = '0 0 auto';
+  headersContainer.style.position = 'sticky';
+  headersContainer.style.left = '0';
+  headersContainer.style.zIndex = '10';
+  headersContainer.style.backgroundColor = '#fff';
+  headersContainer.style.overflowY = 'auto';
 
-  const tempoSlider = document.createElement('div');
-  tempoSlider.className = 'tracker__tempo-slider';
-  tempoControl.appendChild(tempoSlider);
+  function createKnob(label, value, onChangeCallback) {
+    const wrapper = document.createElement('div');
+    wrapper.style.display = 'flex';
+    wrapper.style.alignItems = 'center';
+    wrapper.style.justifyContent = 'space-between';
+    wrapper.style.fontSize = '11px';
+    wrapper.style.marginBottom = '2px';
 
-  const tempoLabel = document.createElement('span');
-  tempoLabel.textContent = 'Tempo';
-  tempoSlider.appendChild(tempoLabel);
+    const lbl = document.createElement('label');
+    lbl.textContent = label;
+    lbl.style.color = '#000000';
 
-  const tempoInput = document.createElement('input');
-  tempoInput.type = 'range';
-  tempoInput.min = '40';
-  tempoInput.max = '200';
-  tempoInput.step = '1';
-  tempoSlider.appendChild(tempoInput);
+    const input = document.createElement('input');
+    input.type = 'range';
+    input.min = '0';
+    input.max = '100';
+    input.value = String(value);
+    input.style.width = '80px';
+    input.addEventListener('input', (e) => {
+      onChangeCallback(Number.parseInt(e.target.value, 10));
+    });
 
-  const tempoValue = document.createElement('span');
-  tempoValue.className = 'tracker__tempo-value';
-  tempoSlider.appendChild(tempoValue);
-
-  const divisionGroup = document.createElement('div');
-  divisionGroup.className = 'tracker__division-group';
-  tempoControl.appendChild(divisionGroup);
-
-  const divisionLabel = document.createElement('span');
-  divisionLabel.textContent = 'Step length';
-  divisionGroup.appendChild(divisionLabel);
-
-  const timeDivisionSelect = document.createElement('select');
-  timeDivisionSelect.className = 'tracker__time-division';
-  TIME_DIVISION_OPTIONS.forEach((option) => {
-    timeDivisionSelect.appendChild(createOption(String(option.value), option.label));
-  });
-  divisionGroup.appendChild(timeDivisionSelect);
-
-  const addStepsButton = document.createElement('button');
-  addStepsButton.type = 'button';
-  addStepsButton.className = 'tracker__add-steps';
-  addStepsButton.textContent = '+8 Steps';
-  timelineHeader.appendChild(addStepsButton);
-
-  const tracksPanel = document.createElement('section');
-  tracksPanel.className = 'tracker__tracks-panel tracker__panel';
-  root.appendChild(tracksPanel);
-
-  const tracksHeading = document.createElement('h4');
-  tracksHeading.className = 'tracker__tracks-heading';
-  tracksHeading.textContent = 'Step & Tune Editor';
-  tracksPanel.appendChild(tracksHeading);
-
-  const editorLayout = document.createElement('div');
-  editorLayout.className = 'tracker__editor-layout';
-  tracksPanel.appendChild(editorLayout);
-
-  const slotGrid = document.createElement('div');
-  slotGrid.className = 'tracker__slot-grid';
-  editorLayout.appendChild(slotGrid);
-
-  const stepEditorContainer = document.createElement('div');
-  stepEditorContainer.className = 'tracker__step-editor-container';
-  editorLayout.appendChild(stepEditorContainer);
-
-  stepEditor = createStepEditor();
-  stepEditorContainer.appendChild(stepEditor.root);
-
-  const tracksSection = document.createElement('div');
-  tracksSection.className = 'tracker__tracks';
-  tracksPanel.appendChild(tracksSection);
-
-  tempoInput.addEventListener('input', () => {
-    tempoValue.textContent = `${tempoInput.value} BPM`;
-  });
-
-  tempoInput.addEventListener('change', () => {
-    const nextBpm = clamp(Number.parseInt(tempoInput.value, 10) || 120, 40, 200);
-    tempoInput.value = String(nextBpm);
-    tempoValue.textContent = `${nextBpm} BPM`;
-    audioConfig.bpm = nextBpm;
-    emitChange();
-  });
-
-  timeDivisionSelect.addEventListener('change', () => {
-    const nextDivision = clamp(Number.parseInt(timeDivisionSelect.value, 10) || 1, 1, 16);
-    audioConfig.timeDivision = nextDivision;
-    emitChange();
-    syncTempoControl();
-  });
-
-  addStepsButton.addEventListener('click', () => {
-    extendPattern(8);
-  });
+    wrapper.append(lbl, input);
+    return wrapper;
+  }
 
   function emitChange() {
     if (typeof onChange === 'function') {
-      onChange(clone(audioConfig));
+      onChange({ globalTune: trackerState });
     }
   }
 
-  function ensureSelectionBounds() {
-    if (!audioConfig.tracks.length) {
-      selected = { trackIndex: 0, stepIndex: 0 };
-      return;
-    }
-    selected.trackIndex = clamp(selected.trackIndex, 0, audioConfig.tracks.length - 1);
-    const currentTrack = audioConfig.tracks[selected.trackIndex];
-    if (!currentTrack || currentTrack.steps.length === 0) {
-      selected.stepIndex = 0;
-      return;
-    }
-    selected.stepIndex = clamp(selected.stepIndex, 0, currentTrack.steps.length - 1);
-  }
+  function renderHeaders() {
+    headersContainer.innerHTML = '';
 
-  function getSelectedStep() {
-    const track = audioConfig.tracks[selected.trackIndex];
-    if (!track) return null;
-    return track.steps[selected.stepIndex] ?? null;
-  }
+    const spacer = document.createElement('div');
+    spacer.style.height = '24px';
+    spacer.style.marginBottom = '4px';
+    headersContainer.appendChild(spacer);
 
-  function getSelectedTrack() {
-    return audioConfig.tracks[selected.trackIndex] ?? null;
-  }
+    trackerState.trackEffects.forEach((fx, trackIndex) => {
+      const header = document.createElement('div');
+      header.style.height = '80px';
+      header.style.border = '1px solid #ccc';
+      header.style.marginBottom = '4px';
+      header.style.padding = '5px';
+      header.style.boxSizing = 'border-box';
+      header.style.display = 'flex';
+      header.style.flexDirection = 'column';
+      header.style.justifyContent = 'space-between';
+      header.style.backgroundColor = '#f9f9f9';
 
-  function syncTempoControl() {
-    const bpm = clamp(Math.round(audioConfig.bpm ?? 120), 40, 200);
-    tempoInput.value = String(bpm);
-    tempoValue.textContent = `${bpm} BPM`;
+      const title = document.createElement('strong');
+      title.textContent = trackIndex === 4 ? 'Drum Track' : `Track ${trackIndex + 1}`;
+      title.style.fontSize = '12px';
+      title.style.color = '#000000';
 
-    const division = clamp(Math.round(audioConfig.timeDivision ?? 2), 1, 16);
-    const hasOption = Array.from(timeDivisionSelect.options).some((option) => option.value === String(division));
-    if (!hasOption) {
-      const customOption = createOption(String(division), `Custom (${division} steps/beat)`);
-      customOption.dataset.custom = 'true';
-      timeDivisionSelect.appendChild(customOption);
-    }
-    Array.from(timeDivisionSelect.options)
-      .filter((option) => option.dataset?.custom === 'true' && option.value !== String(division))
-      .forEach((option) => option.remove());
-    timeDivisionSelect.value = String(division);
-  }
+      const fxContainer = document.createElement('div');
+      fxContainer.style.display = 'flex';
+      fxContainer.style.flexDirection = 'column';
 
-  function updateTimelineMeta() {
-    const totalSteps = audioConfig.stepsPerBar ?? audioConfig.tracks[0]?.steps?.length ?? 0;
-    const stepsLabel = totalSteps === 1 ? 'step' : 'steps';
-    const division = Math.max(1, audioConfig.timeDivision ?? 2);
-    const beats = totalSteps / division;
-    const bars = beats / 4;
-    const barsLabel = Number.isFinite(bars) && bars > 0
-      ? ` • ${bars % 1 === 0 ? `${bars} bar${bars === 1 ? '' : 's'}` : `${bars.toFixed(2)} bars`}`
-      : '';
-    timelineTitle.textContent = `Pattern Steps (${totalSteps} ${stepsLabel}${barsLabel})`;
-    addStepsButton.disabled = audioConfig.tracks.length === 0;
-    syncTempoControl();
-  }
-
-  function extendPattern(stepBlockSize = 8) {
-    if (audioConfig.tracks.length === 0) {
-      return;
-    }
-
-    const increment = Math.max(1, stepBlockSize);
-    audioConfig.stepsPerBar = (audioConfig.stepsPerBar ?? 0) + increment;
-    audioConfig.tracks.forEach((track) => {
-      for (let index = 0; index < increment; index += 1) {
-        track.steps.push(createEmptyStep());
-      }
-    });
-
-    const targetTrack = audioConfig.tracks[selected.trackIndex];
-    if (targetTrack) {
-      selected.stepIndex = clamp(targetTrack.steps.length - increment, 0, targetTrack.steps.length - 1);
-    }
-
-    emitChange();
-    syncAll();
-  }
-
-  function updateLibrary() {
-    libraryGrid.innerHTML = '';
-    if (audioConfig.sampleLibrary.length === 0) {
-      const empty = document.createElement('p');
-      empty.className = 'tracker__empty';
-      empty.textContent = 'No samples loaded yet. Add them to config/config.json to expand your palette!';
-      libraryGrid.appendChild(empty);
-      return;
-    }
-    audioConfig.sampleLibrary.forEach((sample) => {
-      libraryGrid.appendChild(createLibraryCard(sample, onSamplePreview));
-    });
-  }
-
-  function buildSlotGrid() {
-    slotGrid.innerHTML = '';
-    trackSlotViews.length = 0;
-
-    if (audioConfig.tracks.length === 0) {
-      const empty = document.createElement('p');
-      empty.className = 'tracker__empty';
-      empty.textContent = 'Add tracks to start assigning samples.';
-      slotGrid.appendChild(empty);
-      syncTrackSelection();
-      return;
-    }
-
-    audioConfig.tracks.forEach((track, index) => {
-      const view = createTrackSlotCard(track, index);
-      trackSlotViews[index] = view;
-      slotGrid.appendChild(view.root);
-    });
-
-    syncTrackSelection();
-  }
-
-  function createTrackSlotCard(track, trackIndex) {
-    const card = document.createElement('article');
-    card.className = 'tracker-track-card';
-    card.style.setProperty('--track-color', track.color ?? '#48e5c2');
-
-    const headerRow = document.createElement('header');
-    headerRow.className = 'tracker-track-card__header';
-    const heading = document.createElement('h5');
-    heading.textContent = track.name ?? `Track ${trackIndex + 1}`;
-    headerRow.appendChild(heading);
-    card.appendChild(headerRow);
-
-    const slotsWrapper = document.createElement('div');
-    slotsWrapper.className = 'tracker-track-card__slots';
-    card.appendChild(slotsWrapper);
-
-    const slotSelects = [];
-    track.sampleSlots.forEach((slot, slotIndex) => {
-      const slotLabel = document.createElement('label');
-      slotLabel.className = 'tracker-slot';
-      const name = document.createElement('span');
-      name.className = 'tracker-slot__name';
-      name.textContent = `Slot ${slotIndex + 1}`;
-      const select = document.createElement('select');
-      select.appendChild(createOption('', 'Empty'));
-      audioConfig.sampleLibrary.forEach((sample) => {
-        select.appendChild(createOption(sample.id, sample.name));
-      });
-      select.value = slot.sampleId ?? '';
-      select.addEventListener('change', () => {
-        const nextValue = select.value || null;
-        audioConfig.tracks[trackIndex].sampleSlots[slotIndex].sampleId = nextValue;
+      fxContainer.appendChild(createKnob('Reverb', fx.reverb, (val) => {
+        trackerState.trackEffects[trackIndex].reverb = val;
         emitChange();
-        syncSlotOptions(trackIndex);
-        syncTrack(trackIndex);
-        if (selected.trackIndex === trackIndex) {
-          syncEditor();
-        }
-      });
-      slotLabel.append(name, select);
-      slotsWrapper.appendChild(slotLabel);
-      slotSelects.push(select);
-    });
+      }));
+      fxContainer.appendChild(createKnob('Delay', fx.delay, (val) => {
+        trackerState.trackEffects[trackIndex].delay = val;
+        emitChange();
+      }));
+      fxContainer.appendChild(createKnob('Filter', fx.filter, (val) => {
+        trackerState.trackEffects[trackIndex].filter = val;
+        emitChange();
+      }));
 
-    card.addEventListener('click', (event) => {
-      if (event.target.closest('select')) return;
-      selected.trackIndex = trackIndex;
-      ensureSelectionBounds();
-      syncTracks();
-      syncEditor();
-    });
-
-    return { root: card, slotSelects };
-  }
-
-  function syncTrackSelection() {
-    trackSlotViews.forEach((view, index) => {
-      if (!view) return;
-      view.root.classList.toggle('tracker-track-card--active', index === selected.trackIndex);
-    });
-    trackViews.forEach((view, index) => {
-      if (!view) return;
-      view.section.classList.toggle('tracker-track--active', index === selected.trackIndex);
+      header.append(title, fxContainer);
+      headersContainer.appendChild(header);
     });
   }
+  renderHeaders();
 
-  function buildTrackView(track, trackIndex) {
-    const section = document.createElement('article');
-    section.className = 'tracker-track';
-    section.style.setProperty('--track-color', track.color ?? '#48e5c2');
+  const gridScrollable = document.createElement('div');
+  gridScrollable.className = 'tracker-grid';
+  gridScrollable.style.display = 'flex';
+  gridScrollable.style.flexDirection = 'column';
+  gridScrollable.style.overflowX = 'auto';
+  gridScrollable.style.overflowY = 'hidden';
+  gridScrollable.style.paddingBottom = '10px';
+  gridScrollable.style.minWidth = '0';
+  gridScrollable.style.flex = '1 1 auto';
 
-    const headerRow = document.createElement('header');
-    headerRow.className = 'tracker-track__header';
-    const heading = document.createElement('h5');
-    heading.textContent = track.name ?? `Track ${trackIndex + 1}`;
-    headerRow.appendChild(heading);
-    section.appendChild(headerRow);
+  function renderGrid() {
+    gridScrollable.innerHTML = '';
 
-    const grid = document.createElement('div');
-    grid.className = 'tracker-track__grid';
-    grid.style.gridTemplateColumns = `repeat(${Math.max(track.steps.length, 1)}, minmax(72px, 1fr))`;
-    const stepButtons = [];
-    const stepLabels = [];
-    track.steps.forEach((_, stepIndex) => {
-      const { button, sampleLabel } = createStepButton(stepIndex);
-      button.addEventListener('click', () => {
-        selected = { trackIndex, stepIndex };
-        const step = audioConfig.tracks[trackIndex].steps[stepIndex];
-        if (!step.enabled) {
-          const defaultSlot = audioConfig.tracks[trackIndex].sampleSlots.findIndex((slot) => slot.sampleId);
-          if (defaultSlot >= 0) {
-            step.sampleSlot = defaultSlot;
-          }
-          step.enabled = true;
-          emitChange();
-        }
-        syncTrack(trackIndex);
-        syncEditor();
-      });
-      grid.appendChild(button);
-      stepButtons.push(button);
-      stepLabels.push(sampleLabel);
-    });
-    section.appendChild(grid);
-
-    return { section, heading, stepButtons, stepLabels, grid };
-  }
-
-  function buildTracks() {
-    tracksSection.innerHTML = '';
-    trackViews.length = 0;
-    audioConfig.tracks.forEach((track, index) => {
-      const view = buildTrackView(track, index);
-      trackViews[index] = view;
-      tracksSection.appendChild(view.section);
-    });
-  }
-
-  function syncSlotOptions(trackIndex) {
-    const slotView = trackSlotViews[trackIndex];
-    const track = audioConfig.tracks[trackIndex];
-    if (!slotView || !track) return;
-    slotView.slotSelects.forEach((select, slotIndex) => {
-      select.innerHTML = '';
-      select.appendChild(createOption('', 'Empty'));
-      audioConfig.sampleLibrary.forEach((sample) => {
-        select.appendChild(createOption(sample.id, sample.name));
-      });
-      select.value = track.sampleSlots[slotIndex]?.sampleId ?? '';
-    });
-  }
-
-  function syncTrack(trackIndex) {
-    const view = trackViews[trackIndex];
-    const track = audioConfig.tracks[trackIndex];
-    if (!view || !track) return;
-
-    syncSlotOptions(trackIndex);
-
-    view.grid.style.gridTemplateColumns = `repeat(${Math.max(track.steps.length, 1)}, minmax(72px, 1fr))`;
-
-    track.steps.forEach((step, stepIndex) => {
-      const button = view.stepButtons[stepIndex];
-      const label = view.stepLabels[stepIndex];
-      if (!button || !label) return;
-      button.classList.toggle('tracker-step--active', Boolean(step.enabled));
-      button.classList.toggle('tracker-step--selected',
-        selected.trackIndex === trackIndex && selected.stepIndex === stepIndex
-      );
-      const slotLabel = getSampleSlotLabel(audioConfig, track, step.sampleSlot ?? 0);
-      label.textContent = step.enabled ? slotLabel.replace(/^Slot \d+:\s*/, '') : '—';
-      button.title = `${track.name ?? 'Track'} • Step ${stepIndex + 1}${step.enabled ? ` • ${slotLabel}` : ''}`;
-    });
-  }
-
-  function syncTracks() {
-    audioConfig.tracks.forEach((_, index) => syncTrack(index));
-  }
-
-  function createStepEditor() {
-    const root = document.createElement('div');
-    root.className = 'tracker-step-editor';
-
-    const title = document.createElement('div');
-    title.className = 'tracker-step-editor__title';
-    root.appendChild(title);
-
-    const enableLabel = document.createElement('label');
-    enableLabel.className = 'tracker-step-editor__row';
-    const enableText = document.createElement('span');
-    enableText.textContent = 'Enable step';
-    const enableToggle = document.createElement('input');
-    enableToggle.type = 'checkbox';
-    enableLabel.append(enableText, enableToggle);
-
-    const sampleLabel = document.createElement('label');
-    sampleLabel.className = 'tracker-step-editor__row';
-    const sampleText = document.createElement('span');
-    sampleText.textContent = 'Sample slot';
-    const sampleSelect = document.createElement('select');
-    sampleLabel.append(sampleText, sampleSelect);
-
-    const pitchLabel = document.createElement('label');
-    pitchLabel.className = 'tracker-step-editor__row';
-    const pitchText = document.createElement('span');
-    pitchText.textContent = 'Pitch';
-    const pitchValue = document.createElement('span');
-    pitchValue.className = 'tracker-step-editor__value';
-    const pitchInput = document.createElement('input');
-    pitchInput.type = 'range';
-    pitchInput.min = '-24';
-    pitchInput.max = '24';
-    pitchInput.step = '1';
-    const pitchWrapper = document.createElement('div');
-    pitchWrapper.className = 'tracker-step-editor__control';
-    pitchWrapper.append(pitchInput, pitchValue);
-    pitchLabel.append(pitchText, pitchWrapper);
-
-    const volumeLabel = document.createElement('label');
-    volumeLabel.className = 'tracker-step-editor__row';
-    const volumeText = document.createElement('span');
-    volumeText.textContent = 'Volume';
-    const volumeValue = document.createElement('span');
-    volumeValue.className = 'tracker-step-editor__value';
-    const volumeInput = document.createElement('input');
-    volumeInput.type = 'range';
-    volumeInput.min = '0';
-    volumeInput.max = '1.5';
-    volumeInput.step = '0.01';
-    const volumeWrapper = document.createElement('div');
-    volumeWrapper.className = 'tracker-step-editor__control';
-    volumeWrapper.append(volumeInput, volumeValue);
-    volumeLabel.append(volumeText, volumeWrapper);
-
-    const panLabel = document.createElement('label');
-    panLabel.className = 'tracker-step-editor__row';
-    const panText = document.createElement('span');
-    panText.textContent = 'Pan';
-    const panValue = document.createElement('span');
-    panValue.className = 'tracker-step-editor__value';
-    const panInput = document.createElement('input');
-    panInput.type = 'range';
-    panInput.min = '-1';
-    panInput.max = '1';
-    panInput.step = '0.05';
-    const panWrapper = document.createElement('div');
-    panWrapper.className = 'tracker-step-editor__control';
-    panWrapper.append(panInput, panValue);
-    panLabel.append(panText, panWrapper);
-
-    const reverseLabel = document.createElement('label');
-    reverseLabel.className = 'tracker-step-editor__row';
-    const reverseText = document.createElement('span');
-    reverseText.textContent = 'Reverse';
-    const reverseToggle = document.createElement('input');
-    reverseToggle.type = 'checkbox';
-    reverseLabel.append(reverseText, reverseToggle);
-
-    const modLabel = document.createElement('label');
-    modLabel.className = 'tracker-step-editor__row';
-    const modText = document.createElement('span');
-    modText.textContent = 'Mod FX';
-    const modSelect = document.createElement('select');
-    MOD_OPTIONS.forEach((option) => {
-      modSelect.appendChild(createOption(option.value, option.label));
-    });
-    modLabel.append(modText, modSelect);
-
-    root.append(
-      enableLabel,
-      sampleLabel,
-      pitchLabel,
-      volumeLabel,
-      panLabel,
-      reverseLabel,
-      modLabel
-    );
-
-    enableToggle.addEventListener('change', () => {
-      const step = getSelectedStep();
-      if (!step) return;
-      step.enabled = enableToggle.checked;
-      emitChange();
-      syncTrack(selected.trackIndex);
-      syncEditor();
-    });
-
-    sampleSelect.addEventListener('change', () => {
-      const step = getSelectedStep();
-      if (!step) return;
-      step.sampleSlot = Number.parseInt(sampleSelect.value, 10) || 0;
-      emitChange();
-      syncTrack(selected.trackIndex);
-      syncEditor();
-    });
-
-    pitchInput.addEventListener('input', () => {
-      pitchValue.textContent = formatPitch(pitchInput.value);
-    });
-    pitchInput.addEventListener('change', () => {
-      const step = getSelectedStep();
-      if (!step) return;
-      step.pitch = Number.parseInt(pitchInput.value, 10) || 0;
-      emitChange();
-    });
-
-    volumeInput.addEventListener('input', () => {
-      volumeValue.textContent = formatVolume(volumeInput.value);
-    });
-    volumeInput.addEventListener('change', () => {
-      const step = getSelectedStep();
-      if (!step) return;
-      step.volume = Number.parseFloat(volumeInput.value) || 0;
-      emitChange();
-    });
-
-    panInput.addEventListener('input', () => {
-      panValue.textContent = formatPan(panInput.value);
-    });
-    panInput.addEventListener('change', () => {
-      const step = getSelectedStep();
-      if (!step) return;
-      step.pan = Number.parseFloat(panInput.value) || 0;
-      emitChange();
-      syncTrack(selected.trackIndex);
-    });
-
-    reverseToggle.addEventListener('change', () => {
-      const step = getSelectedStep();
-      if (!step) return;
-      step.reverse = reverseToggle.checked;
-      emitChange();
-    });
-
-    modSelect.addEventListener('change', () => {
-      const step = getSelectedStep();
-      if (!step) return;
-      step.mod = modSelect.value;
-      emitChange();
-    });
-
-    return {
-      root,
-      title,
-      enableToggle,
-      sampleSelect,
-      pitchInput,
-      pitchValue,
-      volumeInput,
-      volumeValue,
-      panInput,
-      panValue,
-      reverseToggle,
-      modSelect
-    };
-  }
-
-  function syncEditor() {
-    ensureSelectionBounds();
-    syncTrackSelection();
-
-    if (!stepEditor) return;
-
-    const track = getSelectedTrack();
-    const step = getSelectedStep();
-    if (!track || !step) {
-      stepEditor.root.classList.add('tracker-step-editor--hidden');
-      return;
+    const rulerRow = document.createElement('div');
+    rulerRow.style.display = 'flex';
+    rulerRow.style.flexWrap = 'nowrap';
+    rulerRow.style.width = 'max-content';
+    rulerRow.style.height = '24px';
+    rulerRow.style.marginBottom = '4px';
+    for (let stepIndex = 0; stepIndex < 64; stepIndex++) {
+      const cell = document.createElement('div');
+      cell.style.width = '60px';
+      cell.style.minWidth = '60px';
+      cell.style.borderRight = (stepIndex + 1) % 4 === 0 ? '2px solid #bbb' : '1px solid #e0e0e0';
+      cell.style.display = 'flex';
+      cell.style.alignItems = 'center';
+      cell.style.justifyContent = 'center';
+      cell.style.boxSizing = 'border-box';
+      cell.style.fontSize = '10px';
+      cell.style.fontWeight = (stepIndex % 4 === 0) ? 'bold' : 'normal';
+      cell.style.color = (stepIndex % 4 === 0) ? '#000' : '#888';
+      cell.style.backgroundColor = (stepIndex % 4 === 0) ? '#e0e0e0' : '#f0f0f0';
+      cell.textContent = String(stepIndex + 1);
+      rulerRow.appendChild(cell);
     }
+    gridScrollable.appendChild(rulerRow);
 
-    stepEditor.root.classList.remove('tracker-step-editor--hidden');
-    stepEditor.title.textContent = `${track.name ?? 'Track'} • Step ${selected.stepIndex + 1}`;
+    for (let trackIndex = 0; trackIndex < 5; trackIndex++) {
+      const row = document.createElement('div');
+      row.style.display = 'flex';
+      row.style.flexWrap = 'nowrap';
+      row.style.width = 'max-content';
+      row.style.height = '80px';
+      row.style.marginBottom = '4px';
 
-    stepEditor.enableToggle.checked = Boolean(step.enabled);
+      for (let stepIndex = 0; stepIndex < 64; stepIndex++) {
+        const cell = document.createElement('div');
+        cell.style.width = '60px';
+        cell.style.minWidth = '60px';
+        cell.style.border = '1px solid #e0e0e0';
+        cell.style.borderRight = (stepIndex + 1) % 4 === 0 ? '2px solid #bbb' : '1px solid #e0e0e0';
+        cell.style.display = 'flex';
+        cell.style.alignItems = 'center';
+        cell.style.justifyContent = 'center';
+        cell.style.cursor = 'pointer';
+        cell.style.boxSizing = 'border-box';
+        cell.style.fontSize = '10px';
+        cell.style.padding = '2px';
+        cell.style.textAlign = 'center';
+        cell.style.overflow = 'hidden';
+        cell.style.textOverflow = 'ellipsis';
+        cell.style.whiteSpace = 'nowrap';
+        cell.style.userSelect = 'none';
 
-    stepEditor.sampleSelect.innerHTML = '';
-    track.sampleSlots.forEach((_, slotIndex) => {
-      stepEditor.sampleSelect.appendChild(createOption(String(slotIndex), getSampleSlotLabel(audioConfig, track, slotIndex)));
-    });
-    stepEditor.sampleSelect.value = String(step.sampleSlot ?? 0);
+        cell.addEventListener('mousedown', () => {
+          if (activeSample) {
+            const currentSlot = trackerState.steps[stepIndex].channels[trackIndex];
+            if (currentSlot.sampleId === activeSample) {
+              currentSlot.sampleId = null;
+            } else {
+              currentSlot.sampleId = activeSample;
+            }
+            renderGrid();
+            emitChange();
+          }
+        });
 
-    stepEditor.pitchInput.value = String(step.pitch ?? 0);
-    stepEditor.pitchValue.textContent = formatPitch(step.pitch ?? 0);
+        const slot = trackerState.steps[stepIndex].channels[trackIndex];
+        if (slot.sampleId) {
+          const sample = sampleLibrary.find((s) => s.id === slot.sampleId);
+          cell.textContent = sample ? (sample.name || sample.id) : slot.sampleId;
+          cell.style.backgroundColor = '#48e5c2';
+          cell.style.color = '#000';
+          cell.style.fontWeight = 'bold';
+        } else {
+          cell.style.backgroundColor = '#fff';
+        }
 
-    stepEditor.volumeInput.value = String(step.volume ?? 1);
-    stepEditor.volumeValue.textContent = formatVolume(step.volume ?? 1);
-
-    stepEditor.panInput.value = String(step.pan ?? 0);
-    stepEditor.panValue.textContent = formatPan(step.pan ?? 0);
-
-    stepEditor.reverseToggle.checked = Boolean(step.reverse);
-    stepEditor.modSelect.value = step.mod ?? 'none';
-
-    const disabled = !step.enabled;
-    [
-      stepEditor.sampleSelect,
-      stepEditor.pitchInput,
-      stepEditor.volumeInput,
-      stepEditor.panInput,
-      stepEditor.reverseToggle,
-      stepEditor.modSelect
-    ].forEach((control) => {
-      control.disabled = disabled;
-    });
+        row.appendChild(cell);
+      }
+      gridScrollable.appendChild(row);
+    }
   }
+  renderGrid();
 
-  function syncAll() {
-    ensureSelectionBounds();
-    updateLibrary();
-    buildSlotGrid();
-    buildTracks();
-    updateTimelineMeta();
-    syncTracks();
-    syncEditor();
-  }
+  gridContainerWrapper.append(headersContainer, gridScrollable);
+  root.appendChild(gridContainerWrapper);
 
-  syncAll();
-
-  function update(nextAudioConfig) {
-    audioConfig = normalizeAudioConfig(nextAudioConfig ?? {});
-    ensureSelectionBounds();
-    syncAll();
+  function update(nextConfig = {}) {
+    if (nextConfig.globalTune) {
+      trackerState = nextConfig.globalTune;
+    }
+    sampleLibrary = nextConfig.audio?.sampleLibrary || nextConfig.sampleLibrary || [];
+    if (sampleLibrary.length === 0) {
+      sampleLibrary = clone(DEFAULT_SAMPLE_LIBRARY);
+    }
+    renderLibrary();
+    renderHeaders();
+    renderGrid();
   }
 
   return {

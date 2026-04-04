@@ -2,19 +2,21 @@ import { createBobsEffect } from './bobs.js';
 import { createPlasmaEffect } from './plasma.js';
 import { createStarfieldEffect } from './starfield.js';
 import { createScroller } from './scroller.js';
+import { createVectorEngine } from './vectorEngine.js';
 
 const clone = (value) =>
   typeof structuredClone === 'function' ? structuredClone(value) : JSON.parse(JSON.stringify(value));
 
-export function createEffectsSuite(canvas, initialConfig) {
+export function createEffectsSuite(canvas, initialConfig, onFrame) {
   const context = canvas.getContext('2d');
-  let config = clone(initialConfig);
+  let currentPreviewConfig = clone(initialConfig);
 
   const modules = {
-    plasma: createPlasmaEffect(canvas, config.visual?.plasma ?? {}),
-    bobs: createBobsEffect(canvas, config.visual?.bobs ?? {}),
-    starfield: createStarfieldEffect(canvas, config.visual?.starfield ?? {}),
-    scroller: createScroller(canvas, config.scroller ?? {})
+    plasma: createPlasmaEffect(canvas, currentPreviewConfig.visual?.plasma ?? {}),
+    bobs: createBobsEffect(canvas, currentPreviewConfig.visual?.bobs ?? {}),
+    starfield: createStarfieldEffect(canvas, currentPreviewConfig.visual?.starfield ?? {}),
+    scroller: createScroller(canvas, currentPreviewConfig.scroller ?? {}),
+    vector: createVectorEngine(canvas, currentPreviewConfig.visual?.vector ?? {})
   };
 
   let animationFrame = null;
@@ -26,6 +28,8 @@ export function createEffectsSuite(canvas, initialConfig) {
       return;
     }
 
+    if (onFrame) onFrame(timestamp);
+
     const delta = (timestamp - lastTimestamp) / 1000;
     lastTimestamp = timestamp;
 
@@ -36,10 +40,38 @@ export function createEffectsSuite(canvas, initialConfig) {
     context.fillRect(0, 0, canvas.width, canvas.height);
     context.restore();
 
-    modules.plasma.render(context, timestamp, delta, config.visual.plasma);
-    modules.bobs.render(context, timestamp, delta, config.visual.bobs);
-    modules.starfield.render(context, timestamp, delta, config.visual.starfield);
-    modules.scroller.render(context, timestamp, delta, config.scroller);
+    if (currentPreviewConfig.plasmaEnabled) {
+      modules.plasma.render(context, timestamp, delta, currentPreviewConfig.visual?.plasma);
+    }
+    if (currentPreviewConfig.bobsEnabled) {
+      modules.bobs.render(context, timestamp, delta, currentPreviewConfig.visual?.bobs);
+    }
+    if (currentPreviewConfig.starfieldEnabled) {
+      modules.starfield.render(context, timestamp, delta, currentPreviewConfig.visual?.starfield);
+    }
+    if (currentPreviewConfig.vectorsEnabled) {
+      modules.vector.render(context, timestamp, delta, currentPreviewConfig.visual?.vector);
+    }
+    modules.scroller.render(context, timestamp, delta, currentPreviewConfig.scroller);
+
+    if (currentPreviewConfig.groupName) {
+      context.save();
+      context.font = 'bold 32px "Press Start 2P", sans-serif';
+      const textWidth = context.measureText(currentPreviewConfig.groupName).width;
+      const center = canvas.width / 2;
+      const x = center + Math.sin(timestamp * 0.003) * (canvas.width / 2 - textWidth / 2);
+      const y = 40;
+
+      const gradient = context.createLinearGradient(0, y - 32, 0, y);
+      gradient.addColorStop(0, '#ff00ff');
+      gradient.addColorStop(1, '#00ffff');
+
+      context.fillStyle = gradient;
+      context.shadowColor = 'rgba(255, 0, 255, 0.8)';
+      context.shadowBlur = 10;
+      context.fillText(currentPreviewConfig.groupName, x - textWidth / 2, y);
+      context.restore();
+    }
 
     animationFrame = requestAnimationFrame(renderFrame);
   }
@@ -60,11 +92,12 @@ export function createEffectsSuite(canvas, initialConfig) {
   }
 
   function updateConfig(nextConfig) {
-    config = clone(nextConfig);
-    modules.plasma.updateConfig(config.visual.plasma);
-    modules.bobs.updateConfig(config.visual.bobs);
-    modules.starfield.updateConfig(config.visual.starfield);
-    modules.scroller.updateConfig(config.scroller);
+    currentPreviewConfig = clone(nextConfig);
+    modules.plasma.updateConfig(currentPreviewConfig.visual?.plasma ?? {});
+    modules.bobs.updateConfig(currentPreviewConfig.visual?.bobs ?? {});
+    modules.starfield.updateConfig(currentPreviewConfig.visual?.starfield ?? {});
+    modules.vector.updateConfig(currentPreviewConfig.visual?.vector ?? {});
+    modules.scroller.updateConfig(currentPreviewConfig.scroller ?? {});
   }
 
   function resize() {
@@ -73,9 +106,10 @@ export function createEffectsSuite(canvas, initialConfig) {
     canvas.width = Math.round(width * dpr);
     canvas.height = Math.round(height * dpr);
 
-    modules.plasma.resize(config.visual.plasma);
+    modules.plasma.resize(currentPreviewConfig.visual?.plasma ?? {});
     modules.bobs.resize();
     modules.starfield.resize();
+    modules.vector.resize();
     modules.scroller.resize();
   }
 
