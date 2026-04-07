@@ -113,7 +113,7 @@ export function createControlPanel(container, initialConfig, { onChange, onPlayb
   nav.style.gap = '10px';
   nav.style.marginBottom = '20px';
 
-  const steps = ['1. Setup', '2. Sound Tracker', '3. Configure Parts', '4. Playback', '5. Export'];
+  const steps = ['1. Setup', '2. Sound Tracker', '3. Configure Parts', '4. Playback'];
   const navButtons = steps.map((text, idx) => {
     const btn = document.createElement('button');
     btn.textContent = text;
@@ -403,15 +403,6 @@ export function createControlPanel(container, initialConfig, { onChange, onPlayb
     content.appendChild(group.element);
   }
 
-  // --- STEP 5: EXPORT ---
-  function renderExport() {
-    const group = createGroup('Export Options');
-    const p = document.createElement('p');
-    p.textContent = 'Export functionality (e.g., video recording, social sharing) will be implemented here.';
-    group.content.appendChild(p);
-    content.appendChild(group.element);
-  }
-
   function render() {
     navButtons.forEach((btn, idx) => {
       if (currentStep === idx + 1) {
@@ -430,7 +421,6 @@ export function createControlPanel(container, initialConfig, { onChange, onPlayb
     else if (currentStep === 2) renderSoundTracker();
     else if (currentStep === 3) renderConfigureParts();
     else if (currentStep === 4) renderPlayback();
-    else if (currentStep === 5) renderExport();
   }
 
   syncPartsArray();
