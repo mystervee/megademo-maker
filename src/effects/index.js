@@ -10,6 +10,25 @@ const clone = (value) =>
 export function createEffectsSuite(canvas, initialConfig, onFrame) {
   const context = canvas.getContext('2d');
   let currentPreviewConfig = clone(initialConfig);
+  let cachedGroupNameWidth = 0;
+
+  function updateGroupNameWidth() {
+    if (currentPreviewConfig.groupName) {
+      context.save();
+      context.font = 'bold 32px "Press Start 2P", sans-serif';
+      cachedGroupNameWidth = context.measureText(currentPreviewConfig.groupName).width;
+      context.restore();
+    } else {
+      cachedGroupNameWidth = 0;
+    }
+  }
+
+  updateGroupNameWidth();
+  if (document.fonts) {
+    document.fonts.ready.then(() => {
+      updateGroupNameWidth();
+    });
+  }
 
   const modules = {
     plasma: createPlasmaEffect(canvas, currentPreviewConfig.visual?.plasma ?? {}),
@@ -57,7 +76,7 @@ export function createEffectsSuite(canvas, initialConfig, onFrame) {
     if (currentPreviewConfig.groupName) {
       context.save();
       context.font = 'bold 32px "Press Start 2P", sans-serif';
-      const textWidth = context.measureText(currentPreviewConfig.groupName).width;
+      const textWidth = cachedGroupNameWidth;
       const center = canvas.width / 2;
       const x = center + Math.sin(timestamp * 0.003) * (canvas.width / 2 - textWidth / 2);
       const y = 40;
@@ -92,7 +111,13 @@ export function createEffectsSuite(canvas, initialConfig, onFrame) {
   }
 
   function updateConfig(nextConfig) {
+    const prevGroupName = currentPreviewConfig.groupName;
     currentPreviewConfig = clone(nextConfig);
+
+    if (currentPreviewConfig.groupName !== prevGroupName) {
+      updateGroupNameWidth();
+    }
+
     modules.plasma.updateConfig(currentPreviewConfig.visual?.plasma ?? {});
     modules.bobs.updateConfig(currentPreviewConfig.visual?.bobs ?? {});
     modules.starfield.updateConfig(currentPreviewConfig.visual?.starfield ?? {});

@@ -8,9 +8,10 @@ function measureTextWidth(ctx, text) {
 export function createScroller(canvas, initialConfig = {}) {
   const context = canvas.getContext('2d');
   let offset = canvas.width;
-  let cachedText = initialConfig.messageText ?? '';
-  let cachedFont = initialConfig.messageFont ?? DEFAULT_FONT;
+  let cachedText = null;
+  let cachedFont = null;
   let cachedWidth = 0;
+  let cachedCharWidths = [];
 
   function ensureMetrics(config) {
     const { messageText = '', messageFont = DEFAULT_FONT } = config;
@@ -20,12 +21,25 @@ export function createScroller(canvas, initialConfig = {}) {
       context.save();
       context.font = `24px "${cachedFont}"`;
       cachedWidth = measureTextWidth(context, cachedText || ' ');
+
+      cachedCharWidths = [];
+      for (let i = 0; i < cachedText.length; i++) {
+        cachedCharWidths.push(context.measureText(cachedText[i]).width);
+      }
+
       context.restore();
       offset = canvas.width;
     }
   }
 
   ensureMetrics(initialConfig);
+  if (document.fonts) {
+    document.fonts.ready.then(() => {
+      cachedText = null;
+      cachedFont = null;
+      ensureMetrics(initialConfig);
+    });
+  }
 
   function render(ctx, time, delta, config) {
     const {
@@ -56,7 +70,7 @@ export function createScroller(canvas, initialConfig = {}) {
 
     for (let i = 0; i < messageText.length; i += 1) {
       const char = messageText[i];
-      const charWidth = ctx.measureText(char).width;
+      const charWidth = cachedCharWidths[i] || 0;
       const waveOffset = Math.sin(x * messageWaveFrequency + time * 0.005) * messageWaveAmplitude;
 
       ctx.fillText(char, x, y + waveOffset);
