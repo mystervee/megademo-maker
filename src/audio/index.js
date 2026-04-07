@@ -1,9 +1,8 @@
+import { clone, clamp, ensureArray } from "../utils.js";
 const DEFAULT_STEP_COUNT = 8;
 const DEFAULT_TIME_DIVISION = 2;
 const MAX_SWING = 0.45;
 
-const clone = (value) =>
-  typeof structuredClone === 'function' ? structuredClone(value) : JSON.parse(JSON.stringify(value));
 
 const DEFAULT_AUDIO_CONFIG = {
   bpm: 120,
@@ -15,13 +14,6 @@ const DEFAULT_AUDIO_CONFIG = {
   tracks: []
 };
 
-function clamp(value, min, max) {
-  return Math.min(Math.max(value, min), max);
-}
-
-function ensureArray(value) {
-  return Array.isArray(value) ? value : [];
-}
 
 function normaliseSample(sample = {}, index = 0) {
   return {
