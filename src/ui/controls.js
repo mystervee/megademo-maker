@@ -213,7 +213,7 @@ export function createControlPanel(container, initialConfig, { onChange, onPlayb
   // --- STEP 2: SOUND TRACKER ---
   function renderSoundTracker() {
     const group = createGroup('Global Tune Settings');
-    group.content.style.height = '400px';
+    group.content.style.height = '520px';
     
     trackerPanelInstance.update(config);
     group.content.appendChild(trackerPanelInstance.element);

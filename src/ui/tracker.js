@@ -48,6 +48,7 @@ export function createTrackerPanel(initialConfig = {}, { onChange, onSamplePrevi
   root.style.flexDirection = 'row';
   root.style.gap = '20px';
   root.style.height = '100%';
+  root.style.minWidth = '0';
 
   const libraryContainer = document.createElement('div');
   libraryContainer.className = 'tracker-library';
@@ -101,7 +102,7 @@ export function createTrackerPanel(initialConfig = {}, { onChange, onSamplePrevi
   gridContainerWrapper.style.width = '100%';
   gridContainerWrapper.style.maxWidth = '100%';
   gridContainerWrapper.style.minWidth = '0';
-  gridContainerWrapper.style.flex = '1';
+  gridContainerWrapper.style.flex = '1 1 0%';
 
   const headersContainer = document.createElement('div');
   headersContainer.className = 'tracker-headers';
@@ -157,7 +158,7 @@ export function createTrackerPanel(initialConfig = {}, { onChange, onSamplePrevi
 
     trackerState.trackEffects.forEach((fx, trackIndex) => {
       const header = document.createElement('div');
-      header.style.height = '80px';
+      header.style.height = '100px';
       header.style.border = '1px solid #ccc';
       header.style.marginBottom = '4px';
       header.style.padding = '5px';
@@ -203,7 +204,7 @@ export function createTrackerPanel(initialConfig = {}, { onChange, onSamplePrevi
   gridScrollable.style.overflowY = 'hidden';
   gridScrollable.style.paddingBottom = '10px';
   gridScrollable.style.minWidth = '0';
-  gridScrollable.style.flex = '1 1 auto';
+  gridScrollable.style.flex = '1 1 0%';
 
   function renderGrid() {
     gridScrollable.innerHTML = '';
@@ -237,7 +238,7 @@ export function createTrackerPanel(initialConfig = {}, { onChange, onSamplePrevi
       row.style.display = 'flex';
       row.style.flexWrap = 'nowrap';
       row.style.width = 'max-content';
-      row.style.height = '80px';
+      row.style.height = '100px';
       row.style.marginBottom = '4px';
 
       for (let stepIndex = 0; stepIndex < 64; stepIndex++) {
