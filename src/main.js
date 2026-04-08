@@ -2,6 +2,7 @@ import './styles.css';
 import { createEffectsSuite } from './effects/index.js';
 import { createAudioEngine } from './audio/index.js';
 import { createControlPanel } from './ui/controls.js';
+import { resolveSampleLibrary } from './sampleLibrary.js';
 
 const clone = (value) =>
   typeof structuredClone === 'function' ? structuredClone(value) : JSON.parse(JSON.stringify(value));
@@ -47,30 +48,23 @@ async function loadConfig() {
           scroller: {},
           audio: {
             tracks: [],
-            sampleLibrary: [
-              { id: 'synth-1', name: 'Synth/Bass' },
-              { id: 'synth-2', name: 'Synth/Bass' },
-              { id: 'synth-3', name: 'Synth/Bass' },
-              { id: 'synth-4', name: 'Synth/Bass' },
-              { id: 'synth-5', name: 'Synth/Bass' },
-              { id: 'synth-6', name: 'Synth/Bass' },
-              { id: 'synth-7', name: 'Synth/Bass' },
-              { id: 'synth-8', name: 'Synth/Bass' },
-              { id: 'drum-1', name: 'Drum/Perc' },
-              { id: 'drum-2', name: 'Drum/Perc' },
-              { id: 'drum-3', name: 'Drum/Perc' },
-              { id: 'drum-4', name: 'Drum/Perc' },
-              { id: 'drum-5', name: 'Drum/Perc' },
-              { id: 'drum-6', name: 'Drum/Perc' },
-              { id: 'drum-7', name: 'Drum/Perc' },
-              { id: 'drum-8', name: 'Drum/Perc' }
-            ]
+            sampleLibrary: []
           },
           transition: 'cut'
         }
       ]
     };
   }
+}
+
+function prepareAudioConfig(config = {}) {
+  const nextConfig = clone(config);
+  const audioConfig = nextConfig.audio ?? {};
+  nextConfig.audio = {
+    ...audioConfig,
+    sampleLibrary: resolveSampleLibrary(audioConfig.sampleLibrary ?? [])
+  };
+  return nextConfig;
 }
 
 function deepMerge(target, source) {
@@ -103,7 +97,7 @@ class MegademoApp {
   }
 
   async init() {
-    this.config = await loadConfig();
+    this.config = prepareAudioConfig(await loadConfig());
     
     let initialPreviewConfig = this.config.parts && this.config.parts.length > 0 ? this.config.parts[0] : this.config;
     initialPreviewConfig = { ...initialPreviewConfig, groupName: this.config.globalSettings?.groupName ?? this.config.groupName };
@@ -198,6 +192,7 @@ class MegademoApp {
 
   applyConfig(nextConfig, currentStep = 1, currentPartTab = 0) {
     this.config = deepMerge(this.config, nextConfig);
+    this.config = prepareAudioConfig(this.config);
     this.currentStep = currentStep;
     this.currentPartTab = currentPartTab;
     

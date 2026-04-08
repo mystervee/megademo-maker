@@ -1,25 +1,6 @@
 const clone = (value) =>
   typeof structuredClone === 'function' ? structuredClone(value) : JSON.parse(JSON.stringify(value));
 
-const DEFAULT_SAMPLE_LIBRARY = [
-  { id: 'synth-1', name: 'Synth/Bass' },
-  { id: 'synth-2', name: 'Synth/Bass' },
-  { id: 'synth-3', name: 'Synth/Bass' },
-  { id: 'synth-4', name: 'Synth/Bass' },
-  { id: 'synth-5', name: 'Synth/Bass' },
-  { id: 'synth-6', name: 'Synth/Bass' },
-  { id: 'synth-7', name: 'Synth/Bass' },
-  { id: 'synth-8', name: 'Synth/Bass' },
-  { id: 'drum-1', name: 'Drum/Perc' },
-  { id: 'drum-2', name: 'Drum/Perc' },
-  { id: 'drum-3', name: 'Drum/Perc' },
-  { id: 'drum-4', name: 'Drum/Perc' },
-  { id: 'drum-5', name: 'Drum/Perc' },
-  { id: 'drum-6', name: 'Drum/Perc' },
-  { id: 'drum-7', name: 'Drum/Perc' },
-  { id: 'drum-8', name: 'Drum/Perc' }
-];
-
 export function createTrackerPanel(initialConfig = {}, { onChange, onSamplePreview } = {}) {
   let trackerState = initialConfig.globalTune || {
     steps: Array.from({ length: 64 }, () => ({
@@ -36,10 +17,7 @@ export function createTrackerPanel(initialConfig = {}, { onChange, onSamplePrevi
     }))
   };
 
-  let sampleLibrary = initialConfig.audio?.sampleLibrary || initialConfig.sampleLibrary || [];
-  if (sampleLibrary.length === 0) {
-    sampleLibrary = clone(DEFAULT_SAMPLE_LIBRARY);
-  }
+  let sampleLibrary = clone(initialConfig.audio?.sampleLibrary || initialConfig.sampleLibrary || []);
   let activeSample = null;
 
   const root = document.createElement('div');
@@ -72,9 +50,19 @@ export function createTrackerPanel(initialConfig = {}, { onChange, onSamplePrevi
 
   function renderLibrary() {
     libraryList.innerHTML = '';
+    if (sampleLibrary.length === 0) {
+      const emptyItem = document.createElement('li');
+      emptyItem.textContent = 'No samples found in assets/music.';
+      emptyItem.style.padding = '8px';
+      emptyItem.style.color = 'rgba(255, 255, 255, 0.75)';
+      libraryList.appendChild(emptyItem);
+      return;
+    }
+
     sampleLibrary.forEach((sample) => {
       const li = document.createElement('li');
       li.textContent = sample.name || sample.id;
+      li.title = sample.fullName || sample.description || sample.name || sample.id;
       li.style.cursor = 'pointer';
       li.style.padding = '8px';
       li.style.borderRadius = '4px';
@@ -277,10 +265,12 @@ export function createTrackerPanel(initialConfig = {}, { onChange, onSamplePrevi
         if (slot.sampleId) {
           const sample = sampleLibrary.find((s) => s.id === slot.sampleId);
           cell.textContent = sample ? (sample.name || sample.id) : slot.sampleId;
+          cell.title = sample?.fullName || sample?.description || slot.sampleId;
           cell.style.backgroundColor = '#48e5c2';
           cell.style.color = '#000';
           cell.style.fontWeight = 'bold';
         } else {
+          cell.title = '';
           cell.style.backgroundColor = '#fff';
         }
 
@@ -298,9 +288,9 @@ export function createTrackerPanel(initialConfig = {}, { onChange, onSamplePrevi
     if (nextConfig.globalTune) {
       trackerState = nextConfig.globalTune;
     }
-    sampleLibrary = nextConfig.audio?.sampleLibrary || nextConfig.sampleLibrary || [];
-    if (sampleLibrary.length === 0) {
-      sampleLibrary = clone(DEFAULT_SAMPLE_LIBRARY);
+    sampleLibrary = clone(nextConfig.audio?.sampleLibrary || nextConfig.sampleLibrary || []);
+    if (activeSample && !sampleLibrary.some((sample) => sample.id === activeSample)) {
+      activeSample = null;
     }
     renderLibrary();
     renderHeaders();
