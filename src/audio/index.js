@@ -1,19 +1,25 @@
-import { clone, clamp, ensureArray } from "../utils.js";
-const DEFAULT_STEP_COUNT = 8;
-const DEFAULT_TIME_DIVISION = 2;
-const MAX_SWING = 0.45;
+import { clone, clamp, ensureArray } from '../utils.js';
 
+const DEFAULT_BPM = 120;
+const DEFAULT_STEP_COUNT = 64;
+const DEFAULT_CHANNEL_COUNT = 5;
+const SCHEDULER_LOOKAHEAD_MS = 25;
+const SCHEDULE_AHEAD_TIME_SECONDS = 0.12;
 
 const DEFAULT_AUDIO_CONFIG = {
-  bpm: 120,
-  swing: 0,
-  stepsPerBar: DEFAULT_STEP_COUNT,
-  timeDivision: DEFAULT_TIME_DIVISION,
+  bpm: DEFAULT_BPM,
   loop: true,
   sampleLibrary: [],
-  tracks: []
+  globalTune: {
+    steps: Array.from({ length: DEFAULT_STEP_COUNT }, () => ({
+      channels: Array.from({ length: DEFAULT_CHANNEL_COUNT }, () => ({
+        sampleId: null,
+        pitch: 0,
+        volume: 1
+      }))
+    }))
+  }
 };
-
 
 function normaliseSample(sample = {}, index = 0) {
   return {
@@ -27,121 +33,74 @@ function normaliseSample(sample = {}, index = 0) {
   };
 }
 
-function normaliseTrack(track = {}, index = 0, stepsPerBar = DEFAULT_STEP_COUNT) {
-  const trackId = track.id ?? `track-${index}`;
-  const maxSampleSlots = Math.max(1, Number.isInteger(track.maxSampleSlots) ? track.maxSampleSlots : 4);
-  const sampleSlots = Array.from({ length: maxSampleSlots }, (_, slotIndex) => {
-    const slot = track.sampleSlots?.[slotIndex] ?? {};
-    return {
-      id: slot.id ?? `${trackId}-slot-${slotIndex}`,
-      sampleId: typeof slot.sampleId === 'string' ? slot.sampleId : null
-    };
-  });
-
-  const stepCount = Array.isArray(track.steps) && track.steps.length > 0 ? track.steps.length : stepsPerBar;
-  const steps = Array.from({ length: stepCount }, (_, stepIndex) => {
-    const step = track.steps?.[stepIndex] ?? {};
-    return {
-      enabled: Boolean(step.enabled),
-      sampleSlot: Number.isInteger(step.sampleSlot) ? step.sampleSlot : 0,
-      pitch: Number.isFinite(step.pitch) ? step.pitch : 0,
-      volume: typeof step.volume === 'number' ? clamp(step.volume, 0, 2) : 1,
-      pan: typeof step.pan === 'number' ? clamp(step.pan, -1, 1) : 0,
-      reverse: Boolean(step.reverse),
-      mod: typeof step.mod === 'string' ? step.mod : 'none'
-    };
-  });
+function normaliseGlobalTune(globalTune = {}) {
+  const sourceSteps = ensureArray(globalTune.steps);
+  const stepCount = sourceSteps.length > 0 ? sourceSteps.length : DEFAULT_STEP_COUNT;
 
   return {
-    id: trackId,
-    name: track.name ?? `Track ${index + 1}`,
-    color: track.color ?? '#48e5c2',
-    maxSampleSlots,
-    sampleSlots,
-    steps,
-    muted: Boolean(track.muted)
+    steps: Array.from({ length: stepCount }, (_, stepIndex) => {
+      const step = sourceSteps[stepIndex] ?? {};
+      const sourceChannels = ensureArray(step.channels);
+
+      return {
+        channels: Array.from({ length: DEFAULT_CHANNEL_COUNT }, (_, channelIndex) => {
+          const channel = sourceChannels[channelIndex] ?? {};
+          return {
+            sampleId:
+              typeof channel.sampleId === 'string' && channel.sampleId.length > 0 ? channel.sampleId : null,
+            pitch: Number.isFinite(channel.pitch) ? channel.pitch : 0,
+            volume: typeof channel.volume === 'number' ? clamp(channel.volume, 0, 2) : 1
+          };
+        })
+      };
+    })
   };
 }
 
 export function normalizeAudioConfig(input = {}) {
   const provided = clone(input ?? {});
-  const bpm = Number.isFinite(provided.bpm) ? provided.bpm : DEFAULT_AUDIO_CONFIG.bpm;
-  const swing = clamp(Number.isFinite(provided.swing) ? provided.swing : DEFAULT_AUDIO_CONFIG.swing, 0, 100);
-  const stepsPerBarRaw = Number.isInteger(provided.stepsPerBar) ? provided.stepsPerBar : DEFAULT_AUDIO_CONFIG.stepsPerBar;
-  const stepsPerBar = Math.max(1, stepsPerBarRaw ?? DEFAULT_STEP_COUNT);
-  const timeDivisionRaw = Number.isFinite(provided.timeDivision) ? provided.timeDivision : DEFAULT_TIME_DIVISION;
-  const timeDivision = clamp(Math.round(timeDivisionRaw), 1, 16);
+  const bpm = Math.max(1, Number.isFinite(provided.bpm) ? provided.bpm : DEFAULT_AUDIO_CONFIG.bpm);
   const loop = Boolean(provided.loop ?? DEFAULT_AUDIO_CONFIG.loop);
-
   const sampleLibrary = ensureArray(provided.sampleLibrary).map((sample, index) => normaliseSample(sample, index));
-  const tracks = ensureArray(provided.tracks).map((track, index) => normaliseTrack(track, index, stepsPerBar));
+  const globalTune = normaliseGlobalTune(provided.globalTune ?? DEFAULT_AUDIO_CONFIG.globalTune);
 
   return {
     bpm,
-    swing,
-    stepsPerBar,
-    timeDivision,
     loop,
     sampleLibrary,
-    tracks
+    globalTune
   };
-}
-
-function createReversedBuffer(context, buffer) {
-  const reversed = context.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
-  for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
-    const sourceData = buffer.getChannelData(channel);
-    const targetData = reversed.getChannelData(channel);
-    for (let i = 0; i < sourceData.length; i += 1) {
-      targetData[i] = sourceData[sourceData.length - 1 - i];
-    }
-  }
-  return reversed;
-}
-
-function createBitcrusherCurve(bits = 4) {
-  const length = 2 ** 16;
-  const curve = new Float32Array(length);
-  const levels = 2 ** bits;
-  for (let i = 0; i < length; i += 1) {
-    const x = (i / (length - 1)) * 2 - 1;
-    curve[i] = Math.round(x * levels) / levels;
-  }
-  return curve;
-}
-
-function getStepDurationSeconds(config, stepIndex) {
-  const bpm = config.bpm || 120;
-  const division = Math.max(1, config.timeDivision || DEFAULT_TIME_DIVISION);
-  const baseDuration = (60 / bpm) / division;
-  const swingAmount = clamp((config.swing ?? 0) / 100, 0, MAX_SWING);
-  if (stepIndex % 2 === 1) {
-    return baseDuration * (1 + swingAmount);
-  }
-  return baseDuration * (1 - swingAmount);
 }
 
 function collectSampleIds(audioConfig) {
   const ids = new Set();
-  audioConfig.tracks.forEach((track) => {
-    track.sampleSlots.forEach((slot) => {
-      if (slot?.sampleId) {
-        ids.add(slot.sampleId);
+  audioConfig.globalTune.steps.forEach((step) => {
+    step.channels.forEach((channel) => {
+      if (channel.sampleId) {
+        ids.add(channel.sampleId);
       }
     });
   });
   return ids;
 }
 
-export function createAudioEngine(initialConfig = {}) {
+export function createAudioEngine(initialConfig = {}, { onStepChange } = {}) {
   let config = normalizeAudioConfig(initialConfig);
   let audioContext = null;
   let outputGain = null;
   let isPlaying = false;
-  let stepIndex = 0;
-  let timeoutId = null;
+  let schedulerTimerId = null;
+  let nextStepTime = 0;
+  let currentStepIndex = 0;
+  let playheadTimerIds = [];
   const sampleCache = new Map();
   const loadingMap = new Map();
+
+  function emitStepChange(stepIndex) {
+    if (typeof onStepChange === 'function') {
+      onStepChange(stepIndex);
+    }
+  }
 
   function ensureContext() {
     if (audioContext) return audioContext;
@@ -156,11 +115,16 @@ export function createAudioEngine(initialConfig = {}) {
     return audioContext;
   }
 
-  function clearTimer() {
-    if (timeoutId) {
-      window.clearTimeout(timeoutId);
-      timeoutId = null;
+  function clearSchedulerTimer() {
+    if (schedulerTimerId) {
+      window.clearTimeout(schedulerTimerId);
+      schedulerTimerId = null;
     }
+  }
+
+  function clearPlayheadTimers() {
+    playheadTimerIds.forEach((timerId) => window.clearTimeout(timerId));
+    playheadTimerIds = [];
   }
 
   async function loadSample(sampleId) {
@@ -186,8 +150,7 @@ export function createAudioEngine(initialConfig = {}) {
         }
         const arrayBuffer = await response.arrayBuffer();
         const audioBuffer = await context.decodeAudioData(arrayBuffer);
-        const reversedBuffer = createReversedBuffer(context, audioBuffer);
-        const entry = { buffer: audioBuffer, reversed: reversedBuffer };
+        const entry = { buffer: audioBuffer };
         sampleCache.set(sampleId, entry);
         return entry;
       } catch (error) {
@@ -208,171 +171,111 @@ export function createAudioEngine(initialConfig = {}) {
   async function prepareSamples() {
     const ids = Array.from(collectSampleIds(config));
     if (ids.length === 0) return;
-    await Promise.all(ids.map((id) => loadSample(id).catch((error) => {
-      console.warn(`Failed to preload sample ${id}`, error);
-    })));
+
+    await Promise.all(
+      ids.map((id) =>
+        loadSample(id).catch((error) => {
+          console.warn(`Failed to preload sample ${id}`, error);
+        })
+      )
+    );
   }
 
-  function createModChain(context, node, step, startTime) {
-    let current = node;
-    switch (step.mod) {
-      case 'lpf': {
-        const filter = context.createBiquadFilter();
-        filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(1200, startTime);
-        filter.Q.setValueAtTime(0.7, startTime);
-        current.connect(filter);
-        current = filter;
-        break;
-      }
-      case 'hpf': {
-        const filter = context.createBiquadFilter();
-        filter.type = 'highpass';
-        filter.frequency.setValueAtTime(1000, startTime);
-        filter.Q.setValueAtTime(0.9, startTime);
-        current.connect(filter);
-        current = filter;
-        break;
-      }
-      case 'bitcrush': {
-        const crusher = context.createWaveShaper();
-        crusher.curve = createBitcrusherCurve(4);
-        crusher.oversample = '4x';
-        current.connect(crusher);
-        current = crusher;
-        break;
-      }
-      case 'chorus': {
-        const dry = context.createGain();
-        const wet = context.createGain();
-        dry.gain.setValueAtTime(0.8, startTime);
-        wet.gain.setValueAtTime(0.4, startTime);
-        const delay = context.createDelay();
-        delay.delayTime.setValueAtTime(0.02, startTime);
-        const feedback = context.createGain();
-        feedback.gain.setValueAtTime(0.2, startTime);
-        current.connect(dry);
-        current.connect(delay);
-        delay.connect(feedback);
-        feedback.connect(delay);
-        delay.connect(wet);
-        const mix = context.createGain();
-        dry.connect(mix);
-        wet.connect(mix);
-        current = mix;
-        break;
-      }
-      case 'delay': {
-        const dry = context.createGain();
-        const wet = context.createGain();
-        dry.gain.setValueAtTime(0.9, startTime);
-        wet.gain.setValueAtTime(0.5, startTime);
-        const delay = context.createDelay();
-        delay.delayTime.setValueAtTime(0.28, startTime);
-        const feedback = context.createGain();
-        feedback.gain.setValueAtTime(0.35, startTime);
-        current.connect(dry);
-        current.connect(delay);
-        delay.connect(wet);
-        delay.connect(feedback);
-        feedback.connect(delay);
-        const mix = context.createGain();
-        dry.connect(mix);
-        wet.connect(mix);
-        current = mix;
-        break;
-      }
-      default:
-        break;
-    }
-    return current;
+  function getStepDurationSeconds() {
+    return 60 / config.bpm / 4;
   }
 
-  function playStep(track, step, startTime) {
+  function getStepCount() {
+    return Math.max(1, config.globalTune.steps.length || DEFAULT_STEP_COUNT);
+  }
+
+  function queuePlayheadUpdate(stepIndex, stepTime) {
     const context = ensureContext();
-    const slot = track.sampleSlots?.[step.sampleSlot];
-    if (!slot || !slot.sampleId) {
+    const delayMs = Math.max(0, (stepTime - context.currentTime) * 1000);
+    const timeoutId = window.setTimeout(() => {
+      playheadTimerIds = playheadTimerIds.filter((id) => id !== timeoutId);
+      if (isPlaying) {
+        emitStepChange(stepIndex);
+      }
+    }, delayMs);
+    playheadTimerIds.push(timeoutId);
+  }
+
+  function playChannel(channel, startTime) {
+    if (!channel.sampleId) {
       return;
     }
-    loadSample(slot.sampleId)
+
+    const context = ensureContext();
+    loadSample(channel.sampleId)
       .then((entry) => {
         if (!entry) return;
-        const source = context.createBufferSource();
-        source.buffer = step.reverse ? entry.reversed : entry.buffer;
-        const playbackRate = Math.pow(2, (step.pitch ?? 0) / 12);
-        const now = context.currentTime;
-        const playbackStart = Math.max(startTime, now + 0.01);
-        source.playbackRate.setValueAtTime(playbackRate, playbackStart);
-        source.loop = false;
 
-        let chain = source;
-        chain = createModChain(context, chain, step, playbackStart);
+        const source = context.createBufferSource();
+        source.buffer = entry.buffer;
 
         const gainNode = context.createGain();
-        gainNode.gain.setValueAtTime(clamp(step.volume ?? 1, 0, 2), playbackStart);
-        chain.connect(gainNode);
+        const playbackStart = Math.max(startTime, context.currentTime + 0.005);
+        gainNode.gain.setValueAtTime(clamp(channel.volume ?? 1, 0, 2), playbackStart);
 
-        let destination = gainNode;
-        if (context.createStereoPanner) {
-          const panner = context.createStereoPanner();
-          panner.pan.setValueAtTime(clamp(step.pan ?? 0, -1, 1), playbackStart);
-          destination.connect(panner);
-          destination = panner;
-        }
+        source.connect(gainNode);
+        gainNode.connect(outputGain);
 
-        destination.connect(outputGain);
-
-        const stopTime = playbackStart + (source.buffer.duration / playbackRate) + 0.05;
         source.start(playbackStart);
-        source.stop(stopTime);
+        source.stop(playbackStart + entry.buffer.duration + 0.05);
       })
       .catch((error) => {
         console.warn('Failed to play sample', error);
       });
   }
 
-  function cycleLength() {
-    return Math.max(1, config.stepsPerBar || DEFAULT_STEP_COUNT);
-  }
-
-  function scheduleNext() {
-    if (!isPlaying) return;
-    const context = ensureContext();
-    const nominalStart = context.currentTime + 0.06;
-    const tracks = config.tracks ?? [];
-
-    tracks.forEach((track) => {
-      if (track.muted) return;
-      const steps = track.steps ?? [];
-      if (steps.length === 0) return;
-      const step = steps[stepIndex % steps.length];
-      if (!step || !step.enabled) return;
-      playStep(track, step, nominalStart);
-    });
-
-    const duration = getStepDurationSeconds(config, stepIndex);
-    const nextIndex = stepIndex + 1;
-    if (!config.loop && nextIndex >= cycleLength()) {
-      window.setTimeout(() => {
-        stop();
-      }, duration * 1000);
+  function scheduleStep(stepIndex, stepTime) {
+    const step = config.globalTune.steps[stepIndex];
+    if (!step) {
       return;
     }
 
-    stepIndex = nextIndex % cycleLength();
-    clearTimer();
-    timeoutId = window.setTimeout(scheduleNext, duration * 1000);
+    step.channels.forEach((channel) => {
+      playChannel(channel, stepTime);
+    });
+
+    queuePlayheadUpdate(stepIndex, stepTime);
+  }
+
+  function advanceStep() {
+    nextStepTime += getStepDurationSeconds();
+    currentStepIndex = (currentStepIndex + 1) % getStepCount();
+  }
+
+  function scheduler() {
+    if (!isPlaying) return;
+
+    const context = ensureContext();
+    while (nextStepTime < context.currentTime + SCHEDULE_AHEAD_TIME_SECONDS) {
+      scheduleStep(currentStepIndex, nextStepTime);
+      advanceStep();
+    }
+
+    clearSchedulerTimer();
+    schedulerTimerId = window.setTimeout(scheduler, SCHEDULER_LOOKAHEAD_MS);
   }
 
   async function start() {
     if (isPlaying) return;
+
     try {
       const context = ensureContext();
       await context.resume();
       await prepareSamples();
+
       isPlaying = true;
-      stepIndex = 0;
-      scheduleNext();
+      currentStepIndex = 0;
+      nextStepTime = context.currentTime + 0.05;
+
+      clearSchedulerTimer();
+      clearPlayheadTimers();
+      emitStepChange(null);
+      scheduler();
     } catch (error) {
       console.error('Unable to start audio engine', error);
       throw error;
@@ -382,7 +285,9 @@ export function createAudioEngine(initialConfig = {}) {
   function stop() {
     if (!isPlaying) return;
     isPlaying = false;
-    clearTimer();
+    clearSchedulerTimer();
+    clearPlayheadTimers();
+    emitStepChange(null);
   }
 
   function toggle() {
@@ -396,7 +301,6 @@ export function createAudioEngine(initialConfig = {}) {
   function updateConfig(nextConfig = {}) {
     config = normalizeAudioConfig(nextConfig);
     if (isPlaying) {
-      stepIndex = 0;
       prepareSamples();
     }
   }
@@ -418,11 +322,13 @@ export function createAudioEngine(initialConfig = {}) {
 
   async function previewSample(sampleId) {
     if (!sampleId) return;
+
     try {
       const context = ensureContext();
       await context.resume();
       const entry = await loadSample(sampleId);
       if (!entry) return;
+
       const source = context.createBufferSource();
       source.buffer = entry.buffer;
       const gainNode = context.createGain();

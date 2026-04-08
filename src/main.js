@@ -67,6 +67,15 @@ function prepareAudioConfig(config = {}) {
   return nextConfig;
 }
 
+function getAudioEngineConfig(config = {}) {
+  return {
+    bpm: config.globalSettings?.bpm ?? config.audio?.bpm ?? 120,
+    loop: config.audio?.loop ?? true,
+    sampleLibrary: config.audio?.sampleLibrary ?? [],
+    globalTune: config.globalTune ?? {}
+  };
+}
+
 function deepMerge(target, source) {
   const output = clone(target);
   Object.entries(source).forEach(([key, value]) => {
@@ -90,6 +99,7 @@ class MegademoApp {
     this.resizeObserver = null;
     this.onWindowResize = null;
     this.isPlaying = false;
+    this.isTrackerPreviewPlaying = false;
     this.currentPlayingIndex = 0;
     this.partStartTime = 0;
     this.currentStep = 1;
@@ -104,7 +114,11 @@ class MegademoApp {
     this.effects = createEffectsSuite(this.canvas, initialPreviewConfig, (timestamp) => {
       this.onRenderFrame(timestamp);
     });
-    this.audioEngine = createAudioEngine(this.config.audio ?? {});
+    this.audioEngine = createAudioEngine(getAudioEngineConfig(this.config), {
+      onStepChange: (stepIndex) => {
+        this.controls.setPlaybackStep(stepIndex);
+      }
+    });
 
     this.controls = createControlPanel(this.controlContainer, this.config, {
       onChange: (updatedConfig, currentStep, currentPartTab) => {
@@ -120,10 +134,18 @@ class MegademoApp {
       onSamplePreview: (sampleId) => {
         if (!sampleId) return;
         this.audioEngine.previewSample(sampleId);
+      },
+      onTrackerPreviewStart: () => {
+        this.startTrackerPreview();
+      },
+      onTrackerPreviewStop: () => {
+        this.stopTrackerPreview();
       }
     });
 
     this.controls.setPlaybackState(false);
+    this.controls.setTrackerPlaybackState(false);
+    this.controls.setPlaybackStep(null);
     this.updateGroupName();
     this.setupResizeHandling();
     this.effects.resize();
@@ -159,6 +181,10 @@ class MegademoApp {
   }
 
   startSequence() {
+    if (this.isTrackerPreviewPlaying) {
+      this.stopTrackerPreview();
+    }
+
     this.isPlaying = true;
     this.currentPlayingIndex = 0;
     this.partStartTime = performance.now();
@@ -182,12 +208,46 @@ class MegademoApp {
   stopSequence() {
     this.isPlaying = false;
     this.controls.setPlaybackState(false);
+    this.controls.setPlaybackStep(null);
     
     if (this.audioEngine.getState().isPlaying) {
       this.audioEngine.stop();
     }
     
     this.applyConfig(this.config, this.currentStep, this.currentPartTab);
+  }
+
+  startTrackerPreview() {
+    if (this.isTrackerPreviewPlaying) return;
+
+    if (this.isPlaying) {
+      this.stopSequence();
+    }
+
+    this.isTrackerPreviewPlaying = true;
+    this.controls.setTrackerPlaybackState(true);
+    this.controls.setPlaybackStep(null);
+
+    if (!this.audioEngine.getState().isPlaying) {
+      this.audioEngine.start().catch((error) => {
+        console.error(error);
+        this.isTrackerPreviewPlaying = false;
+        this.controls.setTrackerPlaybackState(false);
+        this.controls.setPlaybackStep(null);
+      });
+    }
+  }
+
+  stopTrackerPreview() {
+    if (!this.isTrackerPreviewPlaying && !this.audioEngine.getState().isPlaying) return;
+
+    this.isTrackerPreviewPlaying = false;
+    this.controls.setTrackerPlaybackState(false);
+    this.controls.setPlaybackStep(null);
+
+    if (this.audioEngine.getState().isPlaying) {
+      this.audioEngine.stop();
+    }
   }
 
   applyConfig(nextConfig, currentStep = 1, currentPartTab = 0) {
@@ -209,7 +269,7 @@ class MegademoApp {
     previewConfig = { ...previewConfig, groupName: this.config.globalSettings?.groupName ?? this.config.groupName };
 
     this.effects.updateConfig(previewConfig);
-    this.audioEngine.updateConfig(this.config.audio ?? {});
+    this.audioEngine.updateConfig(getAudioEngineConfig(this.config));
     this.controls.update(this.config);
     this.updateGroupName();
   }

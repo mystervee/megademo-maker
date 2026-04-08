@@ -80,11 +80,17 @@ function deepMerge(target, source) {
   return output;
 }
 
-export function createControlPanel(container, initialConfig, { onChange, onPlaybackToggle, onSamplePreview }) {
+export function createControlPanel(
+  container,
+  initialConfig,
+  { onChange, onPlaybackToggle, onSamplePreview, onTrackerPreviewStart, onTrackerPreviewStop }
+) {
   let config = clone(initialConfig);
   let currentStep = 1;
   let currentPartTab = 0;
   let playbackState = { isPlaying: false, currentIndex: 0, totalParts: 1 };
+  let trackerPlaybackState = { isPlaying: false };
+  let currentPlaybackStep = null;
 
   container.innerHTML = '';
   container.className = 'wizard-container';
@@ -137,6 +143,7 @@ export function createControlPanel(container, initialConfig, { onChange, onPlayb
     },
     onSamplePreview
   });
+  trackerPanelInstance.setPlaybackStep(currentPlaybackStep);
 
   function syncPartsArray() {
     if (!config.parts) config.parts = [];
@@ -214,8 +221,44 @@ export function createControlPanel(container, initialConfig, { onChange, onPlayb
   function renderSoundTracker() {
     const group = createGroup('Global Tune Settings');
     group.content.style.height = '520px';
-    
+    group.content.style.display = 'grid';
+    group.content.style.gap = '12px';
+
+    const trackerActions = document.createElement('div');
+    trackerActions.className = 'tracker-preview-controls';
+
+    const trackerStatus = document.createElement('p');
+    trackerStatus.className = 'tracker-preview-status';
+    trackerStatus.textContent = trackerPlaybackState.isPlaying
+      ? 'Tracker preview playing.'
+      : 'Tracker preview stopped.';
+
+    const playTrackerButton = document.createElement('button');
+    playTrackerButton.type = 'button';
+    playTrackerButton.className = 'playback-toggle tracker-preview-button';
+    playTrackerButton.textContent = 'Play Tracker';
+    playTrackerButton.disabled = trackerPlaybackState.isPlaying;
+    playTrackerButton.addEventListener('click', () => {
+      if (typeof onTrackerPreviewStart === 'function') {
+        onTrackerPreviewStart();
+      }
+    });
+
+    const stopTrackerButton = document.createElement('button');
+    stopTrackerButton.type = 'button';
+    stopTrackerButton.className = 'playback-toggle tracker-preview-button tracker-preview-button--secondary';
+    stopTrackerButton.textContent = 'Stop Tracker';
+    stopTrackerButton.disabled = !trackerPlaybackState.isPlaying;
+    stopTrackerButton.addEventListener('click', () => {
+      if (typeof onTrackerPreviewStop === 'function') {
+        onTrackerPreviewStop();
+      }
+    });
+
+    trackerActions.append(playTrackerButton, stopTrackerButton, trackerStatus);
     trackerPanelInstance.update(config);
+    trackerPanelInstance.setPlaybackStep(currentPlaybackStep);
+    group.content.appendChild(trackerActions);
     group.content.appendChild(trackerPanelInstance.element);
     content.appendChild(group.element);
   }
@@ -429,6 +472,8 @@ export function createControlPanel(container, initialConfig, { onChange, onPlayb
   function update(newConfig) {
     config = clone(newConfig);
     syncPartsArray();
+    trackerPanelInstance.update(config);
+    trackerPanelInstance.setPlaybackStep(currentPlaybackStep);
     render(); // Re-render to update currently active step/inputs
   }
 
@@ -444,8 +489,32 @@ export function createControlPanel(container, initialConfig, { onChange, onPlayb
     }
   }
 
+  function setPlaybackStep(stepIndex) {
+    currentPlaybackStep = Number.isInteger(stepIndex) ? stepIndex : null;
+    trackerPanelInstance.setPlaybackStep(currentPlaybackStep);
+  }
+
+  function setTrackerPlaybackState(isPlaying) {
+    trackerPlaybackState = { isPlaying };
+    const playTrackerButton = content.querySelector('.tracker-preview-button');
+    const stopTrackerButton = content.querySelector('.tracker-preview-button--secondary');
+    const trackerStatus = content.querySelector('.tracker-preview-status');
+
+    if (playTrackerButton) {
+      playTrackerButton.disabled = isPlaying;
+    }
+    if (stopTrackerButton) {
+      stopTrackerButton.disabled = !isPlaying;
+    }
+    if (trackerStatus) {
+      trackerStatus.textContent = isPlaying ? 'Tracker preview playing.' : 'Tracker preview stopped.';
+    }
+  }
+
   return {
     update,
-    setPlaybackState
+    setPlaybackState,
+    setPlaybackStep,
+    setTrackerPlaybackState
   };
 }

@@ -1,16 +1,20 @@
 const clone = (value) =>
   typeof structuredClone === 'function' ? structuredClone(value) : JSON.parse(JSON.stringify(value));
 
+const DEFAULT_STEP_COUNT = 64;
+const DEFAULT_TRACK_COUNT = 5;
+const STEP_CELL_WIDTH = 60;
+
 export function createTrackerPanel(initialConfig = {}, { onChange, onSamplePreview } = {}) {
   let trackerState = initialConfig.globalTune || {
-    steps: Array.from({ length: 64 }, () => ({
-      channels: Array.from({ length: 5 }, () => ({
+    steps: Array.from({ length: DEFAULT_STEP_COUNT }, () => ({
+      channels: Array.from({ length: DEFAULT_TRACK_COUNT }, () => ({
         sampleId: null,
         pitch: 0,
         volume: 1
       }))
     })),
-    trackEffects: Array.from({ length: 5 }, () => ({
+    trackEffects: Array.from({ length: DEFAULT_TRACK_COUNT }, () => ({
       reverb: 0,
       delay: 0,
       filter: 0
@@ -19,6 +23,8 @@ export function createTrackerPanel(initialConfig = {}, { onChange, onSamplePrevi
 
   let sampleLibrary = clone(initialConfig.audio?.sampleLibrary || initialConfig.sampleLibrary || []);
   let activeSample = null;
+  let currentPlaybackStep = null;
+  let stepElementsByIndex = [];
 
   const root = document.createElement('div');
   root.className = 'tracker-ui';
@@ -47,6 +53,52 @@ export function createTrackerPanel(initialConfig = {}, { onChange, onSamplePrevi
   libraryList.style.margin = '0';
   libraryList.style.flex = '1';
   libraryList.style.overflowY = 'auto';
+
+  function getStepCount() {
+    return Math.max(1, trackerState.steps?.length || DEFAULT_STEP_COUNT);
+  }
+
+  function registerStepElement(stepIndex, element) {
+    if (!stepElementsByIndex[stepIndex]) {
+      stepElementsByIndex[stepIndex] = [];
+    }
+    stepElementsByIndex[stepIndex].push(element);
+  }
+
+  function syncPlaybackStep() {
+    stepElementsByIndex.flat().forEach((element) => {
+      element.classList.remove('active-step-highlight');
+    });
+
+    if (!Number.isInteger(currentPlaybackStep)) {
+      return;
+    }
+
+    const activeElements = stepElementsByIndex[currentPlaybackStep] || [];
+    activeElements.forEach((element) => {
+      element.classList.add('active-step-highlight');
+    });
+
+    const anchor = activeElements[0];
+    if (!anchor) {
+      return;
+    }
+
+    const maxScrollLeft = Math.max(0, gridScrollable.scrollWidth - gridScrollable.clientWidth);
+    const visibleLeft = gridScrollable.scrollLeft;
+    const visibleRight = visibleLeft + gridScrollable.clientWidth;
+    const anchorLeft = anchor.offsetLeft;
+    const anchorRight = anchorLeft + STEP_CELL_WIDTH;
+
+    if (anchorLeft < visibleLeft) {
+      gridScrollable.scrollLeft = Math.max(0, anchorLeft);
+      return;
+    }
+
+    if (anchorRight > visibleRight) {
+      gridScrollable.scrollLeft = Math.min(maxScrollLeft, anchorRight - gridScrollable.clientWidth);
+    }
+  }
 
   function renderLibrary() {
     libraryList.innerHTML = '';
@@ -157,7 +209,7 @@ export function createTrackerPanel(initialConfig = {}, { onChange, onSamplePrevi
       header.style.backgroundColor = '#f9f9f9';
 
       const title = document.createElement('strong');
-      title.textContent = trackIndex === 4 ? 'Drum Track' : `Track ${trackIndex + 1}`;
+      title.textContent = trackIndex === DEFAULT_TRACK_COUNT - 1 ? 'Drum Track' : `Track ${trackIndex + 1}`;
       title.style.fontSize = '12px';
       title.style.color = '#000000';
 
@@ -165,18 +217,24 @@ export function createTrackerPanel(initialConfig = {}, { onChange, onSamplePrevi
       fxContainer.style.display = 'flex';
       fxContainer.style.flexDirection = 'column';
 
-      fxContainer.appendChild(createKnob('Reverb', fx.reverb, (val) => {
-        trackerState.trackEffects[trackIndex].reverb = val;
-        emitChange();
-      }));
-      fxContainer.appendChild(createKnob('Delay', fx.delay, (val) => {
-        trackerState.trackEffects[trackIndex].delay = val;
-        emitChange();
-      }));
-      fxContainer.appendChild(createKnob('Filter', fx.filter, (val) => {
-        trackerState.trackEffects[trackIndex].filter = val;
-        emitChange();
-      }));
+      fxContainer.appendChild(
+        createKnob('Reverb', fx.reverb, (val) => {
+          trackerState.trackEffects[trackIndex].reverb = val;
+          emitChange();
+        })
+      );
+      fxContainer.appendChild(
+        createKnob('Delay', fx.delay, (val) => {
+          trackerState.trackEffects[trackIndex].delay = val;
+          emitChange();
+        })
+      );
+      fxContainer.appendChild(
+        createKnob('Filter', fx.filter, (val) => {
+          trackerState.trackEffects[trackIndex].filter = val;
+          emitChange();
+        })
+      );
 
       header.append(title, fxContainer);
       headersContainer.appendChild(header);
@@ -196,6 +254,7 @@ export function createTrackerPanel(initialConfig = {}, { onChange, onSamplePrevi
 
   function renderGrid() {
     gridScrollable.innerHTML = '';
+    stepElementsByIndex = Array.from({ length: getStepCount() }, () => []);
 
     const rulerRow = document.createElement('div');
     rulerRow.style.display = 'flex';
@@ -203,25 +262,28 @@ export function createTrackerPanel(initialConfig = {}, { onChange, onSamplePrevi
     rulerRow.style.width = 'max-content';
     rulerRow.style.height = '24px';
     rulerRow.style.marginBottom = '4px';
-    for (let stepIndex = 0; stepIndex < 64; stepIndex++) {
+
+    for (let stepIndex = 0; stepIndex < getStepCount(); stepIndex += 1) {
       const cell = document.createElement('div');
-      cell.style.width = '60px';
-      cell.style.minWidth = '60px';
+      cell.classList.add('tracker-grid-cell');
+      cell.style.width = `${STEP_CELL_WIDTH}px`;
+      cell.style.minWidth = `${STEP_CELL_WIDTH}px`;
       cell.style.borderRight = (stepIndex + 1) % 4 === 0 ? '2px solid #bbb' : '1px solid #e0e0e0';
       cell.style.display = 'flex';
       cell.style.alignItems = 'center';
       cell.style.justifyContent = 'center';
       cell.style.boxSizing = 'border-box';
       cell.style.fontSize = '10px';
-      cell.style.fontWeight = (stepIndex % 4 === 0) ? 'bold' : 'normal';
-      cell.style.color = (stepIndex % 4 === 0) ? '#000' : '#888';
-      cell.style.backgroundColor = (stepIndex % 4 === 0) ? '#e0e0e0' : '#f0f0f0';
+      cell.style.fontWeight = stepIndex % 4 === 0 ? 'bold' : 'normal';
+      cell.style.color = stepIndex % 4 === 0 ? '#000' : '#888';
+      cell.style.backgroundColor = stepIndex % 4 === 0 ? '#e0e0e0' : '#f0f0f0';
       cell.textContent = String(stepIndex + 1);
+      registerStepElement(stepIndex, cell);
       rulerRow.appendChild(cell);
     }
     gridScrollable.appendChild(rulerRow);
 
-    for (let trackIndex = 0; trackIndex < 5; trackIndex++) {
+    for (let trackIndex = 0; trackIndex < DEFAULT_TRACK_COUNT; trackIndex += 1) {
       const row = document.createElement('div');
       row.style.display = 'flex';
       row.style.flexWrap = 'nowrap';
@@ -229,10 +291,11 @@ export function createTrackerPanel(initialConfig = {}, { onChange, onSamplePrevi
       row.style.height = '100px';
       row.style.marginBottom = '4px';
 
-      for (let stepIndex = 0; stepIndex < 64; stepIndex++) {
+      for (let stepIndex = 0; stepIndex < getStepCount(); stepIndex += 1) {
         const cell = document.createElement('div');
-        cell.style.width = '60px';
-        cell.style.minWidth = '60px';
+        cell.classList.add('tracker-grid-cell');
+        cell.style.width = `${STEP_CELL_WIDTH}px`;
+        cell.style.minWidth = `${STEP_CELL_WIDTH}px`;
         cell.style.border = '1px solid #e0e0e0';
         cell.style.borderRight = (stepIndex + 1) % 4 === 0 ? '2px solid #bbb' : '1px solid #e0e0e0';
         cell.style.display = 'flex';
@@ -251,11 +314,7 @@ export function createTrackerPanel(initialConfig = {}, { onChange, onSamplePrevi
         cell.addEventListener('mousedown', () => {
           if (activeSample) {
             const currentSlot = trackerState.steps[stepIndex].channels[trackIndex];
-            if (currentSlot.sampleId === activeSample) {
-              currentSlot.sampleId = null;
-            } else {
-              currentSlot.sampleId = activeSample;
-            }
+            currentSlot.sampleId = currentSlot.sampleId === activeSample ? null : activeSample;
             renderGrid();
             emitChange();
           }
@@ -264,7 +323,7 @@ export function createTrackerPanel(initialConfig = {}, { onChange, onSamplePrevi
         const slot = trackerState.steps[stepIndex].channels[trackIndex];
         if (slot.sampleId) {
           const sample = sampleLibrary.find((s) => s.id === slot.sampleId);
-          cell.textContent = sample ? (sample.name || sample.id) : slot.sampleId;
+          cell.textContent = sample ? sample.name || sample.id : slot.sampleId;
           cell.title = sample?.fullName || sample?.description || slot.sampleId;
           cell.style.backgroundColor = '#48e5c2';
           cell.style.color = '#000';
@@ -274,10 +333,13 @@ export function createTrackerPanel(initialConfig = {}, { onChange, onSamplePrevi
           cell.style.backgroundColor = '#fff';
         }
 
+        registerStepElement(stepIndex, cell);
         row.appendChild(cell);
       }
       gridScrollable.appendChild(row);
     }
+
+    syncPlaybackStep();
   }
   renderGrid();
 
@@ -297,8 +359,14 @@ export function createTrackerPanel(initialConfig = {}, { onChange, onSamplePrevi
     renderGrid();
   }
 
+  function setPlaybackStep(stepIndex) {
+    currentPlaybackStep = Number.isInteger(stepIndex) ? stepIndex : null;
+    syncPlaybackStep();
+  }
+
   return {
     element: root,
-    update
+    update,
+    setPlaybackStep
   };
 }
