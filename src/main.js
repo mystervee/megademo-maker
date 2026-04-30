@@ -79,6 +79,7 @@ function getAudioEngineConfig(config = {}) {
 function deepMerge(target, source) {
   const output = clone(target);
   Object.entries(source).forEach(([key, value]) => {
+    if (key === '__proto__' || key === 'constructor') return;
     if (value && typeof value === 'object' && !Array.isArray(value)) {
       output[key] = deepMerge(output[key] ?? {}, value);
     } else {
